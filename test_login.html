@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG Character Manager - Test Login</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #14161b;
+            color: #e9eef3;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 400px;
+            margin: 50px auto;
+            padding: 30px;
+            background: #1e2230;
+            border-radius: 10px;
+            border: 1px solid #334055;
+        }
+        h1 {
+            color: #4ec9b0;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            color: #a9b6c7;
+        }
+        input[type="text"], input[type="password"] {
+            width: 100%;
+            padding: 12px;
+            background: #262b3a;
+            border: 1px solid #334055;
+            border-radius: 5px;
+            color: #e9eef3;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        input:focus {
+            outline: none;
+            border-color: #4ec9b0;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            background: #4ec9b0;
+            color: #14161b;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        .btn:hover {
+            background: #3ba892;
+        }
+        .toggle-link {
+            text-align: center;
+            margin-top: 20px;
+        }
+        .toggle-link a {
+            color: #4ec9b0;
+            text-decoration: none;
+        }
+        .toggle-link a:hover {
+            text-decoration: underline;
+        }
+        .message {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            display: none;
+        }
+        .success {
+            background: #5bb98c;
+            color: #14161b;
+        }
+        .error {
+            background: #e57373;
+            color: #14161b;
+        }
+        .form-container {
+            display: block;
+        }
+        .form-container.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RPG Character Manager</h1>
+
+        <div id="messages"></div>
+
+        <!-- Login Form -->
+        <div id="loginForm" class="form-container">
+            <h2 style="text-align: center; margin-bottom: 20px;">Anmelden</h2>
+            <div class="form-group">
+                <label for="loginUsername">Benutzername:</label>
+                <input type="text" id="loginUsername" required>
+            </div>
+            <div class="form-group">
+                <label for="loginPassword">Passwort:</label>
+                <input type="password" id="loginPassword" required>
+            </div>
+            <button class="btn" onclick="doLogin()">Anmelden</button>
+            <div class="toggle-link">
+                <a href="#" onclick="showRegister()">Noch kein Account? Hier registrieren</a>
+            </div>
+        </div>
+
+        <!-- Register Form -->
+        <div id="registerForm" class="form-container hidden">
+            <h2 style="text-align: center; margin-bottom: 20px;">Registrieren</h2>
+            <div class="form-group">
+                <label for="registerUsername">Benutzername:</label>
+                <input type="text" id="registerUsername" required>
+            </div>
+            <div class="form-group">
+                <label for="registerPassword">Passwort:</label>
+                <input type="password" id="registerPassword" required>
+            </div>
+            <div class="form-group">
+                <label for="confirmPassword">Passwort bestätigen:</label>
+                <input type="password" id="confirmPassword" required>
+            </div>
+            <button class="btn" onclick="doRegister()">Registrieren</button>
+            <div class="toggle-link">
+                <a href="#" onclick="showLogin()">Bereits registriert? Hier anmelden</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function showMessage(message, type) {
+            const messagesDiv = document.getElementById('messages');
+            messagesDiv.innerHTML = `<div class="message ${type}" style="display: block;">${message}</div>`;
+            setTimeout(() => {
+                messagesDiv.innerHTML = '';
+            }, 5000);
+        }
+
+        function showLogin() {
+            document.getElementById('loginForm').classList.remove('hidden');
+            document.getElementById('registerForm').classList.add('hidden');
+        }
+
+        function showRegister() {
+            document.getElementById('loginForm').classList.add('hidden');
+            document.getElementById('registerForm').classList.remove('hidden');
+        }
+
+        async function doLogin() {
+            const username = document.getElementById('loginUsername').value;
+            const password = document.getElementById('loginPassword').value;
+
+            if (!username || !password) {
+                showMessage('Bitte alle Felder ausfüllen', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showMessage('Anmeldung erfolgreich! Weiterleitung...', 'success');
+                    setTimeout(() => {
+                        window.location.href = '/dashboard';
+                    }, 1000);
+                } else {
+                    showMessage(data.message || 'Anmeldung fehlgeschlagen', 'error');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                showMessage('Verbindungsfehler beim Anmelden', 'error');
+            }
+        }
+
+        async function doRegister() {
+            const username = document.getElementById('registerUsername').value;
+            const password = document.getElementById('registerPassword').value;
+            const confirmPassword = document.getElementById('confirmPassword').value;
+
+            if (!username || !password || !confirmPassword) {
+                showMessage('Bitte alle Felder ausfüllen', 'error');
+                return;
+            }
+
+            if (password !== confirmPassword) {
+                showMessage('Passwörter stimmen nicht überein', 'error');
+                return;
+            }
+
+            if (password.length < 4) {
+                showMessage('Passwort muss mindestens 4 Zeichen lang sein', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password }),
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.success) {
+                    showMessage('Registrierung erfolgreich! Sie können sich jetzt anmelden.', 'success');
+                    setTimeout(() => {
+                        showLogin();
+                        document.getElementById('loginUsername').value = username;
+                    }, 2000);
+                } else {
+                    showMessage(data.message || 'Registrierung fehlgeschlagen', 'error');
+                }
+            } catch (error) {
+                console.error('Registration error:', error);
+                showMessage('Verbindungsfehler bei der Registrierung', 'error');
+            }
+        }
+
+        // Enter-Taste Support
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                if (!document.getElementById('loginForm').classList.contains('hidden')) {
+                    doLogin();
+                } else if (!document.getElementById('registerForm').classList.contains('hidden')) {
+                    doRegister();
+                }
+            }
+        });
+    </script>
+</body>
+</html>

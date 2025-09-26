@@ -1,0 +1,129 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+This is a German-language RPG Character Manager web application built with Flask and PostgreSQL. It allows users to create and manage RPG characters with attributes, health/stress tracking, image uploads, and state management.
+
+## Development Commands
+
+### Running the Application
+```bash
+# Development server (with debug mode) - runs on localhost:4000
+python app.py
+
+# Production with Gunicorn
+gunicorn wsgi:app
+```
+
+### Database Management
+```bash
+# Initialize database (automatic on first run)
+python -c "from app import app, db; db.create_all()"
+```
+
+### Docker Commands
+```bash
+# Build container
+docker build -t rpg-character-manager .
+
+# Run container
+docker run -d --name rpg-manager -p 5000:5000 --env-file .env rpg-character-manager
+```
+
+### Testing and Code Quality
+```bash
+# Run tests
+python -m pytest
+
+# Coverage report
+python -m pytest --cov=app
+
+# Code formatting
+black .
+
+# Linting
+flake8 .
+```
+
+## Architecture Overview
+
+### Application Factory Pattern
+- `app.py`: Main Flask application using factory pattern with `create_app()`
+- `config.py`: Configuration classes for development/production environments
+- `wsgi.py`: Production WSGI entry point
+
+### Database Architecture
+- **SQLAlchemy ORM** with two main models:
+  - `User`: Authentication with bcrypt password hashing
+  - `Character`: RPG character data with JSON fields for complex data
+- **Database agnostic**: SQLite for development, PostgreSQL for production
+- **Automatic derived value calculation**: Leben (health) and stress limits calculated from attributes
+
+### Character System
+- **Base Attributes**: Stärke, Geschicklichkeit, Wahrnehmung, Willenskraft (1-20 scale)
+- **Derived Values**:
+  - Leben (Health) = (Stärke + Willenskraft) × 2 + 10
+  - Max Stress = Willenskraft × 3
+- **Image Storage**: Base64 encoded in database with drag-and-drop upload
+- **States & Effects**: JSON arrays stored as text fields
+
+### API Design
+- **RESTful API** with JSON responses
+- **Authentication**: Flask-Login session-based
+- **Error Handling**: Consistent JSON error responses with German messages
+- **Endpoints**:
+  - `/api/register`, `/api/login` - Authentication
+  - `/api/characters` - CRUD operations for characters
+  - `/api/user/info` - User information
+
+### Frontend Architecture
+- **Server-side rendered** with Jinja2 templates
+- **Vanilla JavaScript** for dynamic interactions
+- **Templates**: `base.html`, `login.html`, `dashboard.html`
+- **Static assets**: CSS, JS, and image uploads in `/static`
+
+## Key Configuration
+
+### Environment Variables
+- `DATABASE_URL`: PostgreSQL connection string for production
+- `SECRET_KEY`: Flask session secret
+- `FLASK_ENV`: development/production mode
+
+### Database Connection
+- Development uses SQLite (`app.db`)
+- Production automatically detects and uses PostgreSQL from `DATABASE_URL`
+- Handles Heroku-style `postgres://` to `postgresql://` URL conversion
+
+## Important Implementation Details
+
+### Image Handling
+- Images stored as binary data in database (`image_data` BLOB field)
+- Base64 encoding/decoding handled in `Character` model methods
+- Drag-and-drop upload in frontend with size limits (16MB)
+
+### German Language Interface
+- All user-facing text in German
+- Error messages and API responses in German
+- Character attributes use German names (Stärke, Geschicklichkeit, etc.)
+
+### Security Features
+- Password hashing with Werkzeug
+- User isolation (users can only access their own characters)
+- CSRF protection via Flask-WTF
+- File upload security with secure filename handling
+
+### Performance Considerations
+- Database indexes on frequently queried fields (user_id, username)
+- Lazy loading for character relationships
+- JSON fields for flexible state/effect storage
+
+## Development Patterns
+
+When working with this codebase:
+- Follow the existing German naming conventions for character attributes
+- Use the `to_dict()` methods for JSON serialization
+- Handle database transactions with proper rollback on errors
+- Test both SQLite (development) and PostgreSQL (production) compatibility
+- Maintain the automatic derived value calculation when updating character attributes

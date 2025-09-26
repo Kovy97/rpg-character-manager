@@ -1,0 +1,835 @@
+{% extends "base.html" %}
+
+{% block title %}Charakter Manager - RPG Character Manager{% endblock %}
+
+{% block content %}
+<div class="app-wrapper">
+    <div class="character-list">
+        <!-- Authentication Section -->
+        <div class="auth-section" id="authSection">
+            {% if current_user.is_authenticated %}
+            <!-- User Info -->
+            <div id="userInfo">
+                <div class="user-info">
+                    <div class="user-avatar" id="userAvatar">{{ current_user.username[0].upper() }}</div>
+                    <div class="user-details">
+                        <p class="username" id="currentUsername">{{ current_user.username }}</p>
+                        <p class="user-meta" id="userMeta">Angemeldet</p>
+                    </div>
+                    <a href="{{ url_for('logout') }}" class="logout-btn">Logout</a>
+                </div>
+            </div>
+            {% else %}
+            <!-- Login Form -->
+            <div id="loginForm">
+                <h4>🔐 Login</h4>
+                <form class="auth-form" method="POST" action="{{ url_for('login') }}">
+                    <input type="text" class="auth-input" name="username" placeholder="Benutzername" required>
+                    <input type="password" class="auth-input" name="password" placeholder="Passwort" required>
+                    <button type="submit" class="auth-btn">Einloggen</button>
+                </form>
+                <div class="auth-toggle" id="showRegister">Noch kein Account? Registrieren</div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" class="hidden">
+                <h4>📝 Registrieren</h4>
+                <form class="auth-form" method="POST" action="{{ url_for('register') }}">
+                    <input type="text" class="auth-input" name="username" placeholder="Benutzername" required>
+                    <input type="email" class="auth-input" name="email" placeholder="E-Mail" required>
+                    <input type="password" class="auth-input" name="password" placeholder="Passwort" required>
+                    <input type="password" class="auth-input" name="confirm_password" placeholder="Passwort bestätigen" required>
+                    <button type="submit" class="auth-btn">Registrieren</button>
+                </form>
+                <div class="auth-toggle" id="showLogin">Bereits registriert? Einloggen</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <h3>Meine Charaktere</h3>
+        <div id="character-list-content">
+            {% if current_user.is_authenticated %}
+                {% for character in characters %}
+                <div class="character-item" data-char-id="{{ character.id }}">
+                    <div class="character-avatar"
+                         {% if character.image_data %}
+                         style="background-image: url('data:image/jpeg;base64,{{ character.get_image_base64() }}')"
+                         {% endif %}></div>
+                    <div class="character-info">
+                        <p class="character-name">{{ character.name }}</p>
+                    </div>
+                    <div class="character-actions">
+                        <button class="char-btn load" onclick="loadCharacter({{ character.id }})">Laden</button>
+                        <button class="char-btn delete" onclick="deleteCharacter({{ character.id }})">×</button>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+            <div class="character-item opacity-05 text-center padding-20">
+                <div class="tiny">Login required</div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="app">
+        <div class="main-content">
+            <h1>Charakter Manager</h1>
+
+            <div class="topbar">
+                <div class="top-left">
+                    <label class="btn neutral file-loader-label">
+                        Dateien laden
+                        <input id="fileLoader" type="file" accept=".json,.txt" multiple class="hidden">
+                    </label>
+                    <div id="dropzone" class="drop">Dateien hier ablegen, um Tabs zu erzeugen</div>
+                </div>
+                <div class="tiny" style="text-align:right">Speichern lädt Dateien herunter (JSON / PNG).</div>
+            </div>
+
+            <div class="tabs" id="tabs">
+                <button class="btn btn-add" id="btnNew">+ Neuer Charakter</button>
+            </div>
+
+            <div class="panels" id="panels"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Lightbox -->
+<div class="modal" id="imgModal">
+    <button class="close-x">Schließen</button>
+    <img src="" alt="Vorschau">
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+(() => {
+    const $ = (sel, root=document) => root.querySelector(sel);
+    const $$ = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+    const uid = () => Math.random().toString(36).slice(2,9);
+
+    const SAVE_PREFIX = 'RPS-';
+    const SAVE_EXT = '.json';
+    const IMG_EXT = '.png';
+
+    const tabsRoot = $('#tabs');
+    const panelsRoot = $('#panels');
+
+    let tabs = [];
+    let current = null;
+    let currentUser = {{ 'true' if current_user.is_authenticated else 'false' }};
+
+    // Authentication toggle functionality
+    const showRegister = $('#showRegister');
+    const showLogin = $('#showLogin');
+    const loginForm = $('#loginForm');
+    const registerForm = $('#registerForm');
+
+    if (showRegister) {
+        showRegister.addEventListener('click', () => {
+            loginForm.classList.add('hidden');
+            registerForm.classList.remove('hidden');
+        });
+    }
+
+    if (showLogin) {
+        showLogin.addEventListener('click', () => {
+            registerForm.classList.add('hidden');
+            loginForm.classList.remove('hidden');
+        });
+    }
+
+    // File loader and drag-drop
+    $('#fileLoader').addEventListener('change', (e) => {
+        const files = Array.from(e.target.files || []);
+        loadFiles(files);
+        e.target.value = '';
+    });
+
+    const drop = $('#dropzone');
+    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, (e) => {
+        e.preventDefault();
+        drop.classList.add('drag');
+    }));
+    ['dragleave','drop'].forEach(ev => drop.addEventListener(ev, (e) => {
+        e.preventDefault();
+        drop.classList.remove('drag');
+    }));
+    drop.addEventListener('drop', (e) => {
+        const files = Array.from(e.dataTransfer.files || []);
+        loadFiles(files);
+    });
+
+    $('#btnNew').addEventListener('click', () => createCharacterTab());
+
+    // Lightbox
+    const modal = $('#imgModal');
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal || e.target.classList.contains('close-x'))
+            modal.classList.remove('open');
+    });
+
+    // Initialize with first character
+    createCharacterTab("Charakter 1");
+
+    // File loading functions
+    async function loadFiles(files) {
+        for (const file of files) {
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const title = data.name?.trim() ||
+                    (file.name.startsWith(SAVE_PREFIX) ?
+                        file.name.slice(SAVE_PREFIX.length).replace(/\.json$/, '') :
+                        file.name.replace(/\.(json|txt)$/, ''));
+                const id = createCharacterTab(title, false);
+                const panel = $(`.panel[data-id="${id}"]`, panelsRoot);
+                setPanelData(panel, data);
+            } catch(err) {
+                alert(`Konnte ${file.name} nicht laden.`);
+            }
+        }
+        if (tabs.length) activateTab(tabs[tabs.length-1].id);
+    }
+
+    // Tab management
+    function createCharacterTab(title, activateNow = true) {
+        const id = uid();
+        const index = tabs.length;
+        const t = { id, title: title || `Charakter ${index+1}`, type:'character' };
+        tabs.push(t);
+
+        const tabEl = document.createElement('div');
+        tabEl.className = 'tab';
+        tabEl.dataset.id = id;
+        tabEl.innerHTML = `
+            <span class="title">${t.title}</span>
+            <button class="share-char" title="Charakter teilen">📤</button>
+            <button class="close" title="Tab schließen">×</button>
+        `;
+        tabsRoot.insertBefore(tabEl, $('#btnNew'));
+
+        tabEl.addEventListener('click', (e) => {
+            if (e.target.closest('.close') || e.target.closest('.share-char')) return;
+            activateTab(id);
+        });
+
+        tabEl.querySelector('.close').addEventListener('click', (e) => {
+            e.stopPropagation();
+            closeTab(id);
+        });
+
+        tabEl.querySelector('.share-char').addEventListener('click', (e) => {
+            e.stopPropagation();
+            shareCharacterToChat(id);
+        });
+
+        const panel = document.createElement('div');
+        panel.className = 'panel';
+        panel.dataset.id = id;
+        panel.innerHTML = panelTemplate(id);
+        panelsRoot.appendChild(panel);
+
+        wireCharacterPanel(panel);
+
+        if(activateNow) activateTab(id);
+        return id;
+    }
+
+    function closeTab(id) {
+        const tabEl = document.querySelector(`.tab[data-id="${id}"]`);
+        const panelEl = document.querySelector(`.panel[data-id="${id}"]`);
+        const idx = tabs.findIndex(t => t.id === id);
+        if (tabEl) tabEl.remove();
+        if (panelEl) panelEl.remove();
+        if (idx !== -1) tabs.splice(idx,1);
+
+        if (current === id) {
+            const next = tabs[0];
+            if (next) activateTab(next.id);
+        }
+    }
+
+    function activateTab(id) {
+        $$('.tab', tabsRoot).forEach(el => el.classList.toggle('active', el.dataset.id === id));
+        $$('.panel', panelsRoot).forEach(el => el.classList.toggle('active', el.dataset.id === id));
+        current = id;
+        recalcEffective(getActivePanel());
+    }
+
+    function getActivePanel() {
+        return $(`.panel.active`, panelsRoot);
+    }
+
+    // Panel template
+    function panelTemplate(id) {
+        const signGroup = `sign-${id}`;
+        return `
+            <div class="grid">
+                <div class="card">
+                    <h3>💪 Charakter</h3>
+                    <label>Name</label>
+                    <input type="text" class="name" placeholder="Charaktername">
+
+                    <div class="row">
+                        <div class="attr-str">
+                            <label>💪 Stärke</label>
+                            <div class="attr-input">
+                                <input type="number" class="staerke" value="0" min="1" max="10">
+                                <div class="progress-bar"><div class="progress-fill"></div></div>
+                            </div>
+                        </div>
+                        <div class="attr-dex">
+                            <label>🤸 Geschicklichkeit</label>
+                            <div class="attr-input">
+                                <input type="number" class="geschick" value="0" min="1" max="10">
+                                <div class="progress-bar"><div class="progress-fill"></div></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="attr-per">
+                            <label>👁️ Wahrnehmung</label>
+                            <div class="attr-input">
+                                <input type="number" class="wahrnehmung" value="0" min="1" max="10">
+                                <div class="progress-bar"><div class="progress-fill"></div></div>
+                            </div>
+                        </div>
+                        <div class="attr-wil">
+                            <label>🧠 Willenskraft</label>
+                            <div class="attr-input">
+                                <input type="number" class="willenskraft" value="0" min="1" max="10">
+                                <div class="progress-bar"><div class="progress-fill"></div></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card mt-4">
+                        <h3>📊 Effektive Werte</h3>
+                        <div class="eff-grid">
+                            <div class="eff attr-str"><div class="label">💪</div><div class="val eff-str">0</div></div>
+                            <div class="eff attr-dex"><div class="label">🤸</div><div class="val eff-dex">0</div></div>
+                            <div class="eff attr-per"><div class="label">👁️</div><div class="val eff-per">0</div></div>
+                            <div class="eff attr-wil"><div class="label">🧠</div><div class="val eff-wil">0</div></div>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="btn neutral btn-save-json" type="button">💾 Speichern (JSON)</button>
+                        <button class="btn btn-save-server" type="button">☁️ Speichern (Server)</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>⚡ Zustände</h3>
+                    <label>Beschreibung</label>
+                    <input type="text" class="zustand-text" placeholder="z. B. Rechte Hand verletzt">
+
+                    <div class="row">
+                        <div>
+                            <label>Attribut</label>
+                            <select class="zustand-attr">
+                                <option>Stärke</option>
+                                <option>Geschicklichkeit</option>
+                                <option>Wahrnehmung</option>
+                                <option>Willenskraft</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Wert</label>
+                            <div class="controls mt-4">
+                                <label><input type="radio" name="${signGroup}" value="+" checked> +</label>
+                                <label><input type="radio" name="${signGroup}" value="-"> −</label>
+                                <input type="number" class="zustand-value w-80" value="1">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="actions">
+                        <button class="btn btn-add-zustand" type="button">⚡ Zustand hinzufügen</button>
+                    </div>
+
+                    <ul class="list zustaende"></ul>
+                </div>
+
+                <div class="card">
+                    <h3>🖼️ Charakterbild</h3>
+                    <div class="img-wrap flex-column align-center">
+                        <img class="img-preview w-240 h-240 mb-8" alt="Vorschau" src="" title="Zum Vergrößern klicken">
+                        <div class="w-100 text-center">
+                            <label class="font-12">Bild auswählen</label>
+                            <input type="file" class="img-file font-12" accept="image/png,image/jpeg">
+                            <div class="actions mt-4 justify-content-center">
+                                <button class="btn btn-save-img font-12 padding-6-8" disabled type="button">💾 PNG speichern</button>
+                            </div>
+                            <div class="img-name tiny font-11"></div>
+                            <div class="tiny font-10">RPS-{Name}.png</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card" style="margin-top: 16px;">
+                <h3>🎲 Würfeln</h3>
+                <div class="dice-wrap">
+                    <div class="dice-left">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding-bottom: 12px;">
+                            <button class="btn attr-btn attr-str" data-attr="Stärke" type="button">💪 Stärke</button>
+                            <button class="btn attr-btn attr-dex" data-attr="Geschicklichkeit" type="button">🤸 Geschick</button>
+                            <button class="btn attr-btn attr-per" data-attr="Wahrnehmung" type="button">👁️ Wahrnehmung</button>
+                            <button class="btn attr-btn attr-wil" data-attr="Willenskraft" type="button">🧠 Willenskraft</button>
+                        </div>
+                        <div class="current-attr text-center" style="padding-bottom: 12px; font-size: 14px; color: var(--muted);">Wähle ein Attribut zum Würfeln</div>
+                        <button class="btn-roll-big" type="button">🎲 WÜRFELN</button>
+                    </div>
+
+                    <div class="dice-panel">
+                        <div class="dice-big">—</div>
+                        <div class="dice-breakdown">Noch kein Wurf.</div>
+                        <div class="history">
+                            <h4>Historie (letzte 10)</h4>
+                            <ul class="history-list"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Panel wiring functions
+    function wireCharacterPanel(panel) {
+        // Name updates tab title
+        const nameInput = panel.querySelector('.name');
+        nameInput.addEventListener('input', () => {
+            const tabTitle = document.querySelector(`.tab[data-id="${panel.dataset.id}"] .title`);
+            const newName = nameInput.value.trim() || defaultTabTitle(panel.dataset.id);
+            tabTitle.textContent = newName;
+            updateImgNameHint(panel);
+        });
+
+        // Attribute live updates
+        ['staerke','geschick','wahrnehmung','willenskraft'].forEach(cls => {
+            const el = panel.querySelector(`.${cls}`);
+            el.addEventListener('input', () => recalcEffective(panel));
+        });
+
+        // Add state
+        panel.querySelector('.btn-add-zustand').addEventListener('click', () => {
+            const text = panel.querySelector('.zustand-text').value.trim();
+            const attr = panel.querySelector('.zustand-attr').value;
+            const val = parseInt(panel.querySelector('.zustand-value').value || '0', 10);
+            const signName = panel.querySelector('[type="radio"]').name;
+            const sign = panel.querySelector(`input[name="${signName}"]:checked`).value;
+
+            if(!text) { alert('Bitte eine Beschreibung eingeben.'); return; }
+            if(!val || val === 0) { alert('Wert darf nicht 0 sein.'); return; }
+
+            const li = document.createElement('li');
+            li.dataset.attr = attr;
+            li.dataset.sign = sign;
+            li.dataset.value = String(val);
+            li.dataset.active = 'true';
+            li.innerHTML = `
+                <div>
+                    <strong>${attr} ${sign}${val}</strong> <span class="pill">(${text})</span>
+                </div>
+                <div class="controls">
+                    <label><input type="checkbox" class="toggle" checked> aktiv</label>
+                    <span class="remove" title="Entfernen">Entfernen</span>
+                </div>
+            `;
+            li.querySelector('.toggle').addEventListener('change', (e) => {
+                li.dataset.active = e.target.checked ? 'true' : 'false';
+                recalcEffective(panel);
+            });
+            li.querySelector('.remove').addEventListener('click', () => {
+                li.remove();
+                recalcEffective(panel);
+            });
+
+            panel.querySelector('.zustaende').appendChild(li);
+            panel.querySelector('.zustand-text').value = '';
+            panel.querySelector('.zustand-value').value = 1;
+            recalcEffective(panel);
+        });
+
+        // Save functions
+        panel.querySelector('.btn-save-json').addEventListener('click', () => {
+            const data = getPanelData(panel);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)], {type:'application/json'}));
+            a.download = (data.name?.trim() ? SAVE_PREFIX + data.name.trim() : SAVE_PREFIX + defaultTabTitle(panel.dataset.id)) + SAVE_EXT;
+            a.click();
+        });
+
+        panel.querySelector('.btn-save-server').addEventListener('click', async () => {
+            await saveCharacterToServer(panel);
+        });
+
+        // Dice rolling
+        panel.querySelectorAll('.attr-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                panel.querySelectorAll('.attr-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const attrName = btn.dataset.attr;
+                const currentAttr = panel.querySelector('.current-attr');
+                currentAttr.textContent = `Gewählt: ${attrName}`;
+            });
+        });
+
+        panel.querySelector('.btn-roll-big').addEventListener('click', () => {
+            const activeBtn = panel.querySelector('.attr-btn.active');
+            if (!activeBtn) {
+                alert('Bitte wähle zuerst ein Attribut aus!');
+                return;
+            }
+            const attr = activeBtn.dataset.attr;
+            rollDice(panel, attr);
+        });
+
+        // Image handling
+        const imgFile = panel.querySelector('.img-file');
+        const imgPreview = panel.querySelector('.img-preview');
+        const btnSaveImg = panel.querySelector('.btn-save-img');
+
+        imgFile.addEventListener('change', (e) => {
+            const file = e.target.files?.[0];
+            if(!file) return;
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                imgPreview.src = reader.result;
+                btnSaveImg.disabled = false;
+                panel.dataset.imageData = reader.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        imgPreview.addEventListener('click', () => {
+            if (imgPreview.src) {
+                modal.querySelector('img').src = imgPreview.src;
+                modal.classList.add('open');
+            }
+        });
+
+        btnSaveImg.addEventListener('click', () => {
+            if (!panel.dataset.imageData) return;
+            const a = document.createElement('a');
+            a.href = panel.dataset.imageData;
+            const name = panel.querySelector('.name').value.trim() || defaultTabTitle(panel.dataset.id);
+            a.download = buildImageName(name);
+            a.click();
+        });
+    }
+
+    // Helper functions
+    function defaultTabTitle(id) {
+        const index = tabs.findIndex(t => t.id === id);
+        return `Charakter ${index + 1}`;
+    }
+
+    function buildImageName(charName) {
+        return `${SAVE_PREFIX}${charName.replace(/[^a-zA-Z0-9äöüßÄÖÜ\s-]/g, '').replace(/\s+/g, '_')}${IMG_EXT}`;
+    }
+
+    function updateImgNameHint(panel) {
+        const nameHint = panel.querySelector('.img-name');
+        const name = panel.querySelector('.name').value.trim() || defaultTabTitle(panel.dataset.id);
+        nameHint.textContent = buildImageName(name);
+    }
+
+    function recalcEffective(panel) {
+        if (!panel) return;
+
+        const base = {
+            str: parseInt(panel.querySelector('.staerke')?.value || '0', 10),
+            dex: parseInt(panel.querySelector('.geschick')?.value || '0', 10),
+            per: parseInt(panel.querySelector('.wahrnehmung')?.value || '0', 10),
+            wil: parseInt(panel.querySelector('.willenskraft')?.value || '0', 10)
+        };
+
+        updateProgressBar(panel, '.staerke', base.str);
+        updateProgressBar(panel, '.geschick', base.dex);
+        updateProgressBar(panel, '.wahrnehmung', base.per);
+        updateProgressBar(panel, '.willenskraft', base.wil);
+
+        const eff = { ...base };
+
+        // Apply state modifications
+        const states = panel.querySelectorAll('.zustaende li[data-active="true"]');
+        states.forEach(state => {
+            const attr = state.dataset.attr;
+            const sign = state.dataset.sign;
+            const val = parseInt(state.dataset.value || '0', 10);
+            const mod = sign === '+' ? val : -val;
+
+            if (attr === 'Stärke') eff.str += mod;
+            else if (attr === 'Geschicklichkeit') eff.dex += mod;
+            else if (attr === 'Wahrnehmung') eff.per += mod;
+            else if (attr === 'Willenskraft') eff.wil += mod;
+        });
+
+        Object.keys(eff).forEach(k => eff[k] = Math.max(0, eff[k]));
+
+        panel.querySelector('.eff-str').textContent = eff.str;
+        panel.querySelector('.eff-dex').textContent = eff.dex;
+        panel.querySelector('.eff-per').textContent = eff.per;
+        panel.querySelector('.eff-wil').textContent = eff.wil;
+    }
+
+    function updateProgressBar(panel, selector, value) {
+        const input = panel.querySelector(selector);
+        if (!input) return;
+
+        const progressBar = input.parentElement.querySelector('.progress-fill');
+        if (!progressBar) return;
+
+        const percentage = Math.min(100, (value / 10) * 100);
+        progressBar.style.width = `${percentage}%`;
+    }
+
+    function rollDice(panel, attr) {
+        const attrMapping = {
+            'Stärke': 'eff-str',
+            'Geschicklichkeit': 'eff-dex',
+            'Wahrnehmung': 'eff-per',
+            'Willenskraft': 'eff-wil'
+        };
+
+        const roll = Math.floor(Math.random() * 20) + 1;
+        const effValue = parseInt(panel.querySelector(`.${attrMapping[attr]}`).textContent || '0', 10);
+        const totalValue = roll + effValue;
+
+        let result, cssClass, displayValue;
+        if (roll === 20) {
+            result = 'Kritischer Erfolg!';
+            cssClass = 'crit-success';
+            displayValue = totalValue;
+        } else if (roll === 1) {
+            result = 'Kritischer Fehler!';
+            cssClass = 'crit-fail';
+            displayValue = totalValue;
+        } else {
+            result = 'Erfolg';
+            cssClass = 'neutral';
+            displayValue = totalValue;
+        }
+
+        const diceDisplay = panel.querySelector('.dice-big');
+        const breakdown = panel.querySelector('.dice-breakdown');
+
+        diceDisplay.textContent = displayValue;
+        diceDisplay.className = `dice-big ${cssClass}`;
+        breakdown.textContent = `${attr} ${effValue} → ${result}`;
+
+        // Add to history
+        const historyList = panel.querySelector('.history-list');
+        const historyItem = document.createElement('li');
+        historyItem.textContent = `W20=${roll}+${effValue}=${totalValue} → ${result}`;
+        historyList.insertBefore(historyItem, historyList.firstChild);
+
+        while (historyList.children.length > 10) {
+            historyList.removeChild(historyList.lastChild);
+        }
+    }
+
+    function getPanelData(panel) {
+        const states = Array.from(panel.querySelectorAll('.zustaende li')).map(li => ({
+            description: li.querySelector('.pill').textContent.replace(/[()]/g, ''),
+            attr: li.dataset.attr,
+            sign: li.dataset.sign,
+            value: parseInt(li.dataset.value || '0', 10),
+            active: li.dataset.active === 'true'
+        }));
+
+        return {
+            name: panel.querySelector('.name').value.trim(),
+            staerke: parseInt(panel.querySelector('.staerke').value || '0', 10),
+            geschicklichkeit: parseInt(panel.querySelector('.geschick').value || '0', 10),
+            wahrnehmung: parseInt(panel.querySelector('.wahrnehmung').value || '0', 10),
+            willenskraft: parseInt(panel.querySelector('.willenskraft').value || '0', 10),
+            zustaende: states,
+            imageData: panel.dataset.imageData || null
+        };
+    }
+
+    function setPanelData(panel, data) {
+        // Store character ID for updates
+        if (data.id) {
+            panel.dataset.characterId = data.id;
+        }
+
+        panel.querySelector('.name').value = data.name || '';
+        panel.querySelector('.staerke').value = data.staerke || 0;
+        panel.querySelector('.geschick').value = data.geschicklichkeit || 0;
+        panel.querySelector('.wahrnehmung').value = data.wahrnehmung || 0;
+        panel.querySelector('.willenskraft').value = data.willenskraft || 0;
+
+        // Set current health and stress if available
+        const lebenInput = panel.querySelector('.leben');
+        if (lebenInput && data.aktuelles_leben !== undefined) {
+            lebenInput.value = data.aktuelles_leben;
+        }
+
+        const stressInput = panel.querySelector('.stress');
+        if (stressInput && data.aktueller_stress !== undefined) {
+            stressInput.value = data.aktueller_stress;
+        }
+
+        if (data.imageData) {
+            console.log('Setting panel image data:', data.imageData ? 'Yes (' + data.imageData.length + ' chars)' : 'No');
+            const imageData = data.imageData.startsWith('data:') ? data.imageData : `data:image/png;base64,${data.imageData}`;
+            panel.dataset.imageData = imageData;
+            const imgPreview = panel.querySelector('.img-preview');
+            if (imgPreview) {
+                imgPreview.src = imageData;
+                imgPreview.style.display = 'block';
+                console.log('Image preview updated');
+            } else {
+                console.log('Image preview element not found');
+            }
+            const btnSaveImg = panel.querySelector('.btn-save-img');
+            if (btnSaveImg) {
+                btnSaveImg.disabled = false;
+            }
+        } else {
+            console.log('No image data to set');
+        }
+
+        const zustaendeList = panel.querySelector('.zustaende');
+        zustaendeList.innerHTML = '';
+        (data.zustaende || []).forEach(state => {
+            const li = document.createElement('li');
+            li.dataset.attr = state.attr;
+            li.dataset.sign = state.sign;
+            li.dataset.value = String(state.value);
+            li.dataset.active = String(state.active);
+
+            li.innerHTML = `
+                <div>
+                    <strong>${state.attr} ${state.sign}${state.value}</strong> <span class="pill">(${state.description})</span>
+                </div>
+                <div class="controls">
+                    <label><input type="checkbox" class="toggle" ${state.active ? 'checked' : ''}> aktiv</label>
+                    <span class="remove" title="Entfernen">Entfernen</span>
+                </div>
+            `;
+
+            li.querySelector('.toggle').addEventListener('change', (e) => {
+                li.dataset.active = e.target.checked ? 'true' : 'false';
+                recalcEffective(panel);
+            });
+            li.querySelector('.remove').addEventListener('click', () => {
+                li.remove();
+                recalcEffective(panel);
+            });
+
+            zustaendeList.appendChild(li);
+        });
+
+        updateImgNameHint(panel);
+        recalcEffective(panel);
+    }
+
+    // Server functions
+    async function saveCharacterToServer(panel) {
+        if (!currentUser) {
+            alert('Sie müssen eingeloggt sein, um Charaktere zu speichern.');
+            return;
+        }
+
+        const data = getPanelData(panel);
+
+        try {
+            const response = await fetch('/api/characters', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: data.name,
+                    staerke: data.staerke,
+                    geschicklichkeit: data.geschicklichkeit,
+                    wahrnehmung: data.wahrnehmung,
+                    willenskraft: data.willenskraft,
+                    zustaende: data.zustaende,
+                    image_base64: data.imageData
+                })
+            });
+
+            if (response.ok) {
+                alert('Charakter erfolgreich gespeichert!');
+                location.reload();
+            } else {
+                const error = await response.json();
+                alert(`Fehler beim Speichern: ${error.message}`);
+            }
+        } catch (err) {
+            alert('Netzwerkfehler beim Speichern des Charakters.');
+            console.error(err);
+        }
+    }
+
+    function shareCharacterToChat(tabId) {
+        const panel = document.querySelector(`.panel[data-id="${tabId}"]`);
+        if (!panel) return;
+        const data = getPanelData(panel);
+        console.log('Sharing character to chat:', data);
+        alert('Chat-Funktion noch nicht implementiert');
+    }
+
+    // Character management from sidebar
+    window.loadCharacter = async function(charId) {
+        try {
+            const response = await fetch(`/api/characters/${charId}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    const char = result.character;
+                    console.log('Loading character:', char);
+                    console.log('Image data received:', char.image_base64 ? 'Yes (' + (char.image_base64.length) + ' chars)' : 'No');
+
+                    const tabId = createCharacterTab(char.name, true);
+                    const panel = document.querySelector(`.panel[data-id="${tabId}"]`);
+                    setPanelData(panel, {
+                        id: char.id,
+                        name: char.name,
+                        staerke: char.staerke,
+                        geschicklichkeit: char.geschicklichkeit,
+                        wahrnehmung: char.wahrnehmung,
+                        willenskraft: char.willenskraft,
+                        aktuelles_leben: char.aktuelles_leben,
+                        aktueller_stress: char.aktueller_stress,
+                        zustaende: char.zustaende || [],
+                        effekte: char.effekte || [],
+                        imageData: char.image_base64
+                    });
+                    console.log('Character loaded successfully:', char.name);
+                } else {
+                    alert('Fehler: ' + result.message);
+                }
+            } else {
+                alert('Fehler beim Laden des Charakters (HTTP ' + response.status + ')');
+            }
+        } catch (err) {
+            console.error('Error loading character:', err);
+            alert('Fehler beim Laden des Charakters.');
+        }
+    }
+
+    window.deleteCharacter = async function(charId) {
+        if (!confirm('Charakter wirklich löschen?')) return;
+        try {
+            const response = await fetch(`/api/characters/${charId}`, { method: 'DELETE' });
+            if (response.ok) {
+                location.reload();
+            } else {
+                alert('Fehler beim Löschen des Charakters.');
+            }
+        } catch (err) {
+            alert('Netzwerkfehler beim Löschen.');
+        }
+    };
+})();
+</script>
+{% endblock %}
