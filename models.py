@@ -11,11 +11,12 @@ class User(UserMixin, db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    email = db.Column(db.String(120), unique=True, nullable=True, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Chat settings stored as JSON
-    chat_settings = db.Column(db.Text, default='{"normalColor": "#e9eef3", "quoteColor": "#4ec9b0", "fontSize": 14, "fontFamily": "Inter, \'Segoe UI\', Arial, sans-serif"}')
+    # Chat settings stored as JSON (nullable for existing users)
+    chat_settings = db.Column(db.Text, nullable=True, default='{"normalColor": "#e9eef3", "quoteColor": "#4ec9b0", "fontSize": 14, "fontFamily": "Inter, \'Segoe UI\', Arial, sans-serif"}')
 
     # Relationship to characters
     characters = db.relationship('Character', backref='owner', lazy=True, cascade='all, delete-orphan')
@@ -36,19 +37,20 @@ class User(UserMixin, db.Model):
     def get_chat_settings(self):
         """Get chat settings as Python dict"""
         try:
-            return json.loads(self.chat_settings) if self.chat_settings else {
-                "normalColor": "#e9eef3",
-                "quoteColor": "#4ec9b0",
-                "fontSize": 14,
-                "fontFamily": "Inter, 'Segoe UI', Arial, sans-serif"
-            }
-        except json.JSONDecodeError:
-            return {
-                "normalColor": "#e9eef3",
-                "quoteColor": "#4ec9b0",
-                "fontSize": 14,
-                "fontFamily": "Inter, 'Segoe UI', Arial, sans-serif"
-            }
+            # Handle case where chat_settings column doesn't exist yet
+            settings = getattr(self, 'chat_settings', None)
+            return json.loads(settings) if settings else self._default_chat_settings()
+        except (json.JSONDecodeError, AttributeError):
+            return self._default_chat_settings()
+
+    def _default_chat_settings(self):
+        """Default chat settings"""
+        return {
+            "normalColor": "#e9eef3",
+            "quoteColor": "#4ec9b0",
+            "fontSize": 14,
+            "fontFamily": "Inter, 'Segoe UI', Arial, sans-serif"
+        }
 
     def set_chat_settings(self, settings):
         """Set chat settings from Python dict"""

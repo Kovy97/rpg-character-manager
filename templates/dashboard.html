@@ -244,12 +244,53 @@
                 <label>🔤 Schriftart</label>
                 <select id="fontFamily">
                     <option value="Inter, 'Segoe UI', Arial, sans-serif">Standard (Inter)</option>
-                    <option value="'Times New Roman', serif">Times New Roman</option>
                     <option value="'Arial', sans-serif">Arial</option>
-                    <option value="'Courier New', monospace">Courier New</option>
-                    <option value="'Georgia', serif">Georgia</option>
+                    <option value="'Helvetica', Arial, sans-serif">Helvetica</option>
                     <option value="'Verdana', sans-serif">Verdana</option>
+                    <option value="'Calibri', sans-serif">Calibri</option>
+                    <option value="'Trebuchet MS', sans-serif">Trebuchet MS</option>
+                    <option value="'Tahoma', sans-serif">Tahoma</option>
+                    <option value="'Lucida Sans', sans-serif">Lucida Sans</option>
+                    <option value="'Segoe UI', sans-serif">Segoe UI</option>
+                    <option value="'Times New Roman', serif">Times New Roman</option>
+                    <option value="'Georgia', serif">Georgia</option>
+                    <option value="'Book Antiqua', serif">Book Antiqua</option>
+                    <option value="'Garamond', serif">Garamond</option>
+                    <option value="'Palatino', serif">Palatino</option>
+                    <option value="'Times', serif">Times</option>
+                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="'Monaco', monospace">Monaco</option>
+                    <option value="'Consolas', monospace">Consolas</option>
+                    <option value="'Lucida Console', monospace">Lucida Console</option>
+                    <option value="'Source Code Pro', monospace">Source Code Pro</option>
+                    <option value="'Fira Code', monospace">Fira Code</option>
+                    <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+                    <option value="'Cascadia Code', monospace">Cascadia Code</option>
                     <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+                    <option value="'Brush Script MT', cursive">Brush Script MT</option>
+                    <option value="'Papyrus', fantasy">Papyrus</option>
+                    <option value="'Impact', fantasy">Impact</option>
+                    <option value="'Chiller', fantasy">Chiller</option>
+                    <option value="'Bebas Neue', sans-serif">Bebas Neue</option>
+                    <option value="'Roboto', sans-serif">Roboto</option>
+                    <option value="'Open Sans', sans-serif">Open Sans</option>
+                    <option value="'Lato', sans-serif">Lato</option>
+                    <option value="'Montserrat', sans-serif">Montserrat</option>
+                    <option value="'Poppins', sans-serif">Poppins</option>
+                    <option value="'Oswald', sans-serif">Oswald</option>
+                    <option value="'Nunito', sans-serif">Nunito</option>
+                    <option value="'Raleway', sans-serif">Raleway</option>
+                    <option value="'Ubuntu', sans-serif">Ubuntu</option>
+                    <option value="'Quicksand', sans-serif">Quicksand</option>
+                    <option value="'Playfair Display', serif">Playfair Display</option>
+                    <option value="'Merriweather', serif">Merriweather</option>
+                    <option value="'Lora', serif">Lora</option>
+                    <option value="'PT Serif', serif">PT Serif</option>
+                    <option value="'Crimson Text', serif">Crimson Text</option>
+                    <option value="system-ui, -apple-system, sans-serif">System UI</option>
+                    <option value="-apple-system, BlinkMacSystemFont, sans-serif">Apple System</option>
+                    <option value="'SF Pro Display', -apple-system, sans-serif">SF Pro Display</option>
+                    <option value="'Segoe UI Variable', 'Segoe UI', sans-serif">Segoe UI Variable</option>
                 </select>
             </div>
 
@@ -1306,26 +1347,8 @@
                 const isOwn = msg.user_id === {{ current_user.id if current_user.is_authenticated else 'null' }};
                 const timestamp = new Date(msg.timestamp).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
 
-                // Process message text for quotes - SIMPLE VERSION
-                let messageText = this.escapeHtml(msg.message);
-
-                                    // Deutsche Anführungszeichen
-                        const OPEN  = '\u201E'; // „ (U+201E)
-                        const CLOSE1 = '\u201C'; // “ (U+201C) – häufig in „…“
-                        const CLOSE2 = '\u201D'; // ” (U+201D) – kommt real oft vor
-
-                        // „ … “  bzw. „ … ”
-                        const germanPattern = new RegExp(`${OPEN}([\\s\\S]*?)(${CLOSE1}|${CLOSE2})`, 'gu');
-                        messageText = messageText.replace(
-                        germanPattern,
-                        `<span class="quote-text">${OPEN}$1$2</span>`
-                        );
-
-                        // Fallback: gerade ASCII-Anführungszeichen " … "
-                        messageText = messageText.replace(
-                        /"([\s\S]*?)"/gu,
-                        '<span class="quote-text">"$1"</span>'
-                        );
+                // Use the unified formatMessageText function
+                let messageText = this.formatMessageText(msg.message);
 
 
                 html += `
@@ -1365,25 +1388,20 @@
                             </div>
                         ` : ''}
                     </div>
-                    <div class="message-content" data-original-text="${this.escapeHtml(msg.message)}">${msg.message}</div>
+                    <div class="message-content" data-original-text="${this.escapeHtml(msg.message)}">${this.formatMessageText(msg.message)}</div>
                 </div>
             `;
         }
 
         formatMessageText(text) {
-            // VIEL EINFACHER - escape erst den Inhalt zwischen quotes
-            text = text.replace(/\u201E([^\u201C]*?)\u201C/g, (match, content) => {
-                const safeContent = this.escapeHtml(content);
-                return `<span class="quote-text">\u201E${safeContent}\u201C</span>`;
-            });
+            // Einfache Quote-Formatierung nur für ASCII Anführungszeichen
+            let result = this.escapeHtml(text);
 
-            text = text.replace(/"([^"]*?)"/g, (match, content) => {
-                const safeContent = this.escapeHtml(content);
-                return `<span class="quote-text">"${safeContent}"</span>`;
-            });
+            // Nur ASCII Anführungszeichen: "text"
+            result = result.replace(/"([^"]*)"/g,
+                '<span class="quote-text">$&</span>');
 
-            // Escape the rest of the text that's not in quotes
-            return text;
+            return result;
         }
 
         escapeHtml(text) {

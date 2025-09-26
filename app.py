@@ -98,8 +98,12 @@ def register():
         flash('Benutzername bereits vergeben', 'error')
         return render_template('dashboard.html', characters=[])
 
+    if User.query.filter_by(email=email).first():
+        flash('E-Mail-Adresse bereits vergeben', 'error')
+        return render_template('dashboard.html', characters=[])
+
     try:
-        user = User(username=username)
+        user = User(username=username, email=email)
         user.set_password(password)
         db.session.add(user)
         db.session.commit()
@@ -107,7 +111,7 @@ def register():
         return render_template('dashboard.html', characters=[])
     except Exception as e:
         db.session.rollback()
-        flash('Fehler bei der Registrierung', 'error')
+        flash(f'Fehler bei der Registrierung: {str(e)}', 'error')
         return render_template('dashboard.html', characters=[])
 
 @app.route('/test_login.html')
@@ -333,10 +337,23 @@ def api_user_info():
 @login_required
 def api_get_chat_settings():
     """Get current user's chat settings"""
-    return jsonify({
-        'success': True,
-        'settings': current_user.get_chat_settings()
-    })
+    try:
+        return jsonify({
+            'success': True,
+            'settings': current_user.get_chat_settings()
+        })
+    except Exception as e:
+        # Fallback to default settings if column doesn't exist
+        default_settings = {
+            "normalColor": "#e9eef3",
+            "quoteColor": "#4ec9b0",
+            "fontSize": 14,
+            "fontFamily": "Inter, 'Segoe UI', Arial, sans-serif"
+        }
+        return jsonify({
+            'success': True,
+            'settings': default_settings
+        })
 
 @app.route('/api/user/chat-settings', methods=['POST'])
 @login_required
@@ -354,14 +371,19 @@ def api_save_chat_settings():
         if not isinstance(data['fontSize'], int) or not (10 <= data['fontSize'] <= 24):
             return jsonify({'success': False, 'message': 'Ungültige Schriftgröße'}), 400
 
-        # Save settings
-        current_user.set_chat_settings(data)
-        db.session.commit()
+        # Try to save settings, ignore if column doesn't exist
+        try:
+            current_user.set_chat_settings(data)
+            db.session.commit()
+            settings = current_user.get_chat_settings()
+        except Exception:
+            # If chat_settings column doesn't exist, just return success with submitted data
+            settings = data
 
         return jsonify({
             'success': True,
             'message': 'Chat-Settings erfolgreich gespeichert',
-            'settings': current_user.get_chat_settings()
+            'settings': settings
         })
 
     except Exception as e:

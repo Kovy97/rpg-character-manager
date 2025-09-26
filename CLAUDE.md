@@ -26,6 +26,12 @@ python -c "from app import create_app; app = create_app(); app.app_context().pus
 python -c "from app import create_app; app = create_app(); app.app_context().push(); from app import db; from models import User, Character"
 ```
 
+**⚠️ CRITICAL: NO DATABASE FLUSHES ALLOWED**
+- **NEVER** run database drops, flushes, or resets that would delete user data
+- **NEVER** use commands like `db.drop_all()`, `db.session.rollback()` on production data, or truncate operations
+- User data is now permanent and must be preserved at all costs
+- Only use `db.create_all()` for initialization, never destructive operations
+
 ### Docker Commands
 ```bash
 # Build container
