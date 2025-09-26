@@ -1,0 +1,371 @@
+# 📋 **Discord-Ähnlicher Chat - Implementierungsplan**
+
+## 🗄️ **Phase 1: Datenbank-Erweiterung**
+
+### **Neue Database Models (models.py)**
+
+```python
+# 1. ChatRoom Model
+class ChatRoom(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    password_hash = db.Column(db.String(255))  # Optional für private Räume
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_public = db.Column(db.Boolean, default=True)
+    max_members = db.Column(db.Integer, default=50)
+
+# 2. ChatMessage Model
+class ChatMessage(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('chat_room.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    message_type = db.Column(db.String(20), default='text')  # text, system, character_share
+
+# 3. RoomMember Model (Many-to-Many)
+class RoomMember(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('chat_room.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    role = db.Column(db.String(20), default='member')  # admin, moderator, member
+```
+
+### **Relationships hinzufügen**
+```python
+# User Model erweitern:
+chat_rooms = db.relationship('ChatRoom', backref='creator', lazy='dynamic')
+room_memberships = db.relationship('RoomMember', backref='user', lazy='dynamic')
+messages = db.relationship('ChatMessage', backref='author', lazy='dynamic')
+```
+
+---
+
+## 🎨 **Phase 2: Frontend-Struktur erweitern**
+
+### **HTML Template Updates (dashboard.html)**
+
+#### **2.1 Chat-Container Struktur ändern**
+```html
+<div class="chat-container">
+    <!-- Chat Tabs (Rooms) -->
+    <div class="chat-tabs">
+        <div class="chat-tab-controls">
+            <button class="btn btn-sm" id="joinRoomBtn">📥 Raum beitreten</button>
+            <button class="btn btn-sm" id="createRoomBtn">➕ Raum erstellen</button>
+        </div>
+        <div class="chat-room-tabs" id="chatRoomTabs">
+            <!-- Dynamically populated room tabs -->
+        </div>
+    </div>
+
+    <!-- Active Chat Content -->
+    <div class="chat-content-wrapper">
+        <div class="chat-header">
+            <h4 id="activeRoomName">Allgemein</h4>
+            <button class="btn btn-sm" id="memberListBtn">👥 Mitglieder</button>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+            <!-- Messages loaded dynamically -->
+        </div>
+
+        <div class="chat-input-section">
+            <div class="chat-input-wrapper">
+                <input type="text" id="chatInput" placeholder="Nachricht schreiben..." maxlength="500">
+                <button id="sendBtn">📤</button>
+                <button id="shareCharBtn">📋</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Member Sidebar (toggleable) -->
+    <div class="member-sidebar hidden" id="memberSidebar">
+        <h5>Mitglieder</h5>
+        <div class="member-list" id="memberList">
+            <!-- Populated dynamically -->
+        </div>
+    </div>
+</div>
+```
+
+#### **2.2 Modal Dialogs hinzufügen**
+```html
+<!-- Room Creation Modal -->
+<div class="modal" id="createRoomModal">
+    <div class="modal-content">
+        <h3>🏠 Neuen Raum erstellen</h3>
+        <form id="createRoomForm">
+            <input type="text" name="roomName" placeholder="Raumname" required>
+            <textarea name="description" placeholder="Beschreibung (optional)"></textarea>
+            <label>
+                <input type="checkbox" name="isPrivate"> Privater Raum (Passwort erforderlich)
+            </label>
+            <input type="password" name="password" placeholder="Passwort (optional)" class="hidden">
+            <div class="modal-actions">
+                <button type="submit" class="btn">Erstellen</button>
+                <button type="button" class="btn neutral" onclick="closeModal('createRoomModal')">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Join Room Modal -->
+<div class="modal" id="joinRoomModal">
+    <div class="modal-content">
+        <h3>📥 Raum beitreten</h3>
+        <div class="available-rooms" id="availableRooms">
+            <!-- Populated with available rooms -->
+        </div>
+    </div>
+</div>
+
+<!-- Password Entry Modal -->
+<div class="modal" id="passwordModal">
+    <div class="modal-content">
+        <h3>🔐 Passwort eingeben</h3>
+        <form id="passwordForm">
+            <input type="hidden" name="roomId">
+            <input type="password" name="password" placeholder="Raumpasswort" required>
+            <div class="modal-actions">
+                <button type="submit" class="btn">Beitreten</button>
+                <button type="button" class="btn neutral" onclick="closeModal('passwordModal')">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+```
+
+---
+
+## 🔧 **Phase 3: Backend API Endpoints**
+
+### **Chat API Routes (app.py erweitern)**
+
+```python
+# 3.1 Room Management
+@app.route('/api/chat/rooms', methods=['GET'])
+def get_available_rooms():
+    # Public rooms + user's joined rooms
+
+@app.route('/api/chat/rooms', methods=['POST'])
+def create_room():
+    # Create new chat room
+
+@app.route('/api/chat/rooms/<int:room_id>/join', methods=['POST'])
+def join_room(room_id):
+    # Join room (with password check if private)
+
+@app.route('/api/chat/rooms/<int:room_id>/leave', methods=['POST'])
+def leave_room(room_id):
+    # Leave room
+
+# 3.2 Messages
+@app.route('/api/chat/rooms/<int:room_id>/messages', methods=['GET'])
+def get_room_messages(room_id):
+    # Get last 200 messages for room
+
+@app.route('/api/chat/rooms/<int:room_id>/messages', methods=['POST'])
+def send_message(room_id):
+    # Send message to room
+
+# 3.3 Members
+@app.route('/api/chat/rooms/<int:room_id>/members', methods=['GET'])
+def get_room_members(room_id):
+    # Get room member list
+```
+
+---
+
+## ⚡ **Phase 4: JavaScript Chat-System**
+
+### **4.1 Chat Manager Class**
+```javascript
+class ChatManager {
+    constructor() {
+        this.activeRoom = null;
+        this.rooms = [];
+        this.messages = new Map(); // roomId -> messages[]
+        this.members = new Map();  // roomId -> members[]
+        this.pollInterval = null;
+    }
+
+    // Core Methods:
+    // - loadUserRooms()
+    // - switchToRoom(roomId)
+    // - sendMessage(message)
+    // - pollForNewMessages()
+    // - updateMemberList()
+    // - createRoom(data)
+    // - joinRoom(roomId, password?)
+}
+```
+
+### **4.2 Real-time Updates**
+```javascript
+// Polling-basiertes Update System (alle 2 Sekunden)
+// Alternative: WebSocket implementation später
+
+setInterval(() => {
+    if (chatManager.activeRoom) {
+        chatManager.pollForNewMessages();
+        chatManager.updateMemberList();
+    }
+}, 2000);
+```
+
+---
+
+## 🎨 **Phase 5: CSS Styling**
+
+### **5.1 Chat Layout Styles**
+```css
+.chat-container {
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 80px);
+}
+
+.chat-tabs {
+    display: flex;
+    flex-direction: column;
+    border-bottom: 1px solid var(--border);
+    padding: 8px;
+}
+
+.chat-room-tabs {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+}
+
+.chat-room-tab {
+    padding: 8px 12px;
+    background: var(--panel-2);
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.2s;
+}
+
+.chat-room-tab.active {
+    background: var(--accent);
+    color: #0c1a18;
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+    max-height: 400px;
+}
+
+.message {
+    margin-bottom: 8px;
+    padding: 8px;
+    border-radius: 8px;
+    background: var(--panel-2);
+}
+
+.message.own {
+    background: var(--accent);
+    color: #0c1a18;
+    margin-left: 20%;
+}
+
+.message-header {
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.member-sidebar {
+    width: 200px;
+    background: var(--panel-2);
+    border-left: 1px solid var(--border);
+    padding: 12px;
+}
+```
+
+---
+
+## 🚀 **Phase 6: Spezial-Features**
+
+### **6.1 Charaktere teilen**
+```javascript
+// Character sharing functionality
+function shareCharacterToChat(characterData) {
+    const shareMessage = {
+        type: 'character_share',
+        character: characterData,
+        message: `[Charakter geteilt: ${characterData.name}]`
+    };
+    // Send as special message type
+}
+```
+
+### **6.2 Message Cleanup System**
+```python
+# Background task für Message-Cleanup (>200 messages)
+def cleanup_old_messages(room_id):
+    messages = ChatMessage.query.filter_by(room_id=room_id)\
+                              .order_by(ChatMessage.timestamp.desc())\
+                              .offset(200).all()
+    for msg in messages:
+        db.session.delete(msg)
+    db.session.commit()
+```
+
+---
+
+## 📊 **Implementierungs-Reihenfolge**
+
+### **Tag 1: Database & Backend**
+1. ✅ Neue Models erstellen
+2. ✅ Database Migration durchführen
+3. ✅ API Endpoints implementieren
+4. ✅ Basis-Funktionalität testen
+
+### **Tag 2: Frontend Core**
+5. ✅ HTML-Struktur erweitern
+6. ✅ CSS-Styling implementieren
+7. ✅ JavaScript Chat Manager
+8. ✅ Room Management UI
+
+### **Tag 3: Advanced Features**
+9. ✅ Message Polling System
+10. ✅ Member Management
+11. ✅ Charaktere-teilen Feature
+12. ✅ Message Cleanup System
+
+### **Tag 4: Polish & Testing**
+13. ✅ UI/UX Verbesserungen
+14. ✅ Error Handling
+15. ✅ Performance Optimierung
+16. ✅ End-to-End Testing
+
+---
+
+## 🔍 **Technische Überlegungen**
+
+### **Performance**
+- Message-Limit: 200 pro Raum
+- Polling-Intervall: 2 Sekunden
+- Database-Indexing für `room_id`, `timestamp`
+
+### **Sicherheit**
+- Passwort-Hash für private Räume
+- User-Berechtigung prüfen vor Message-Zugriff
+- XSS-Schutz für Chat-Messages
+
+### **Skalierbarkeit**
+- Später: WebSocket für Real-time Updates
+- Redis für Session-Management
+- Message-Archivierung für große Räume
+
+---
+
+**🎯 Dieser Plan ist bereit für die Umsetzung morgen! Jede Phase ist klar strukturiert und baut logisch aufeinander auf.**

@@ -7,7 +7,7 @@ import json
 import io
 
 from config import config
-from models import db, User, Character, init_db
+from models import db, User, Character, ChatRoom, ChatMessage, RoomMember, init_db
 
 def create_app(config_name=None):
     app = Flask(__name__)
@@ -328,6 +328,369 @@ def api_user_info():
         'success': True,
         'user': current_user.to_dict()
     })
+
+@app.route('/api/user/chat-settings', methods=['GET'])
+@login_required
+def api_get_chat_settings():
+    """Get current user's chat settings"""
+    return jsonify({
+        'success': True,
+        'settings': current_user.get_chat_settings()
+    })
+
+@app.route('/api/user/chat-settings', methods=['POST'])
+@login_required
+def api_save_chat_settings():
+    """Save current user's chat settings"""
+    try:
+        data = request.get_json()
+
+        # Validate settings structure
+        required_fields = ['normalColor', 'quoteColor', 'fontSize', 'fontFamily']
+        if not all(field in data for field in required_fields):
+            return jsonify({'success': False, 'message': 'Fehlende Settings-Felder'}), 400
+
+        # Validate values
+        if not isinstance(data['fontSize'], int) or not (10 <= data['fontSize'] <= 24):
+            return jsonify({'success': False, 'message': 'Ungültige Schriftgröße'}), 400
+
+        # Save settings
+        current_user.set_chat_settings(data)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Chat-Settings erfolgreich gespeichert',
+            'settings': current_user.get_chat_settings()
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler beim Speichern: {str(e)}'}), 500
+
+# Chat API Endpoints
+@app.route('/api/chat/rooms', methods=['GET'])
+@login_required
+def api_get_rooms():
+    """Get available chat rooms for user"""
+    try:
+        # Get ALL rooms (public + private), but private ones show with lock icon
+        all_rooms = ChatRoom.query.all()
+
+        return jsonify({
+            'success': True,
+            'rooms': [room.to_dict() for room in all_rooms]
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/chat/rooms', methods=['POST'])
+@login_required
+def api_create_room():
+    """Create new chat room"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+        description = data.get('description', '').strip()
+        password = data.get('password', '').strip()
+
+        if not name:
+            return jsonify({'success': False, 'message': 'Raumname ist erforderlich'}), 400
+
+        # Check if room name already exists
+        existing = ChatRoom.query.filter_by(name=name).first()
+        if existing:
+            return jsonify({'success': False, 'message': 'Raumname bereits vergeben'}), 400
+
+        # Create room
+        room = ChatRoom(
+            name=name,
+            description=description,
+            created_by=current_user.id
+        )
+
+        if password:
+            room.set_password(password)
+
+        db.session.add(room)
+        db.session.flush()  # Get room ID
+
+        # Add creator as admin member
+        member = RoomMember(
+            room_id=room.id,
+            user_id=current_user.id,
+            role='admin'
+        )
+        db.session.add(member)
+
+        # Also auto-join public rooms for all users (no membership needed for public)
+        # Private rooms require explicit membership
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Raum erfolgreich erstellt',
+            'room': room.to_dict()
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/chat/rooms/<int:room_id>/join', methods=['POST'])
+@login_required
+def api_join_room(room_id):
+    """Join chat room"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if already member
+        if room.is_member(current_user.id):
+            return jsonify({'success': False, 'message': 'Bereits Mitglied in diesem Raum'}), 400
+
+        # Check password for private rooms
+        if not room.is_public:
+            data = request.get_json()
+            password = data.get('password', '') if data else ''
+            if not room.check_password(password):
+                return jsonify({'success': False, 'message': 'Falsches Passwort'}), 401
+
+        # Add member
+        member = RoomMember(
+            room_id=room_id,
+            user_id=current_user.id
+        )
+        db.session.add(member)
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Raum erfolgreich beigetreten'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/chat/rooms/<int:room_id>/leave', methods=['POST'])
+@login_required
+def api_leave_room(room_id):
+    """Leave chat room"""
+    try:
+        member = RoomMember.query.filter_by(room_id=room_id, user_id=current_user.id).first()
+        if not member:
+            return jsonify({'success': False, 'message': 'Nicht Mitglied in diesem Raum'}), 400
+
+        db.session.delete(member)
+        db.session.commit()
+
+        return jsonify({'success': True, 'message': 'Raum verlassen'})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/chat/rooms/<int:room_id>/messages', methods=['GET'])
+@login_required
+def api_get_messages(room_id):
+    """Get messages for room"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if user is member (for private rooms) or if room is public
+        if not room.is_public and not room.is_member(current_user.id):
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Raum'}), 403
+
+        # Get last 200 messages
+        messages = ChatMessage.query.filter_by(room_id=room_id)\
+                                  .order_by(ChatMessage.timestamp.desc())\
+                                  .limit(200).all()
+        messages.reverse()  # Show oldest first
+
+        return jsonify({
+            'success': True,
+            'messages': [msg.to_dict() for msg in messages]
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/chat/rooms/<int:room_id>/messages', methods=['POST'])
+@login_required
+def api_send_message(room_id):
+    """Send message to room"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if user is member (for private rooms) or if room is public
+        if not room.is_public and not room.is_member(current_user.id):
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Raum'}), 403
+
+        data = request.get_json()
+        message_text = data.get('message', '').strip()
+
+        if not message_text:
+            return jsonify({'success': False, 'message': 'Nachricht darf nicht leer sein'}), 400
+
+        if len(message_text) > 3000:
+            return jsonify({'success': False, 'message': 'Nachricht zu lang (max. 3000 Zeichen)'}), 400
+
+        # Create message
+        message = ChatMessage(
+            room_id=room_id,
+            user_id=current_user.id,
+            message=message_text
+        )
+        db.session.add(message)
+
+        # Clean up old messages if more than 200
+        message_count = ChatMessage.query.filter_by(room_id=room_id).count()
+        if message_count > 200:
+            old_messages = ChatMessage.query.filter_by(room_id=room_id)\
+                                         .order_by(ChatMessage.timestamp.asc())\
+                                         .limit(message_count - 200).all()
+            for old_msg in old_messages:
+                db.session.delete(old_msg)
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': message.to_dict()
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/chat/rooms/<int:room_id>/members', methods=['GET'])
+@login_required
+def api_get_members(room_id):
+    """Get room members"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if user is member (for private rooms) or if room is public
+        if not room.is_public and not room.is_member(current_user.id):
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Raum'}), 403
+
+        members = RoomMember.query.filter_by(room_id=room_id).all()
+
+        return jsonify({
+            'success': True,
+            'members': [member.to_dict() for member in members]
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+
+@app.route('/api/chat/rooms/<int:room_id>/kick', methods=['POST'])
+@login_required
+def api_kick_member(room_id):
+    """Kick a member from the room (only room creator can do this)"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if current user is room creator
+        if room.created_by != current_user.id:
+            return jsonify({'success': False, 'message': 'Nur der Raum-Ersteller kann Mitglieder entfernen'}), 403
+
+        data = request.get_json()
+        user_id = data.get('user_id')
+
+        if not user_id:
+            return jsonify({'success': False, 'message': 'Benutzer-ID fehlt'}), 400
+
+        # Can't kick yourself
+        if user_id == current_user.id:
+            return jsonify({'success': False, 'message': 'Sie können sich nicht selbst entfernen'}), 400
+
+        # Find and remove membership
+        membership = RoomMember.query.filter_by(room_id=room_id, user_id=user_id).first()
+        if not membership:
+            return jsonify({'success': False, 'message': 'Benutzer ist nicht Mitglied dieses Raums'}), 404
+
+        db.session.delete(membership)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Mitglied erfolgreich entfernt'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+
+@app.route('/api/chat/messages/<int:message_id>', methods=['DELETE'])
+@login_required
+def api_delete_message(message_id):
+    """Delete a message (only message author can do this)"""
+    try:
+        message = ChatMessage.query.get(message_id)
+        if not message:
+            return jsonify({'success': False, 'message': 'Nachricht nicht gefunden'}), 404
+
+        # Check if current user is message author
+        if message.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Sie können nur Ihre eigenen Nachrichten löschen'}), 403
+
+        db.session.delete(message)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Nachricht erfolgreich gelöscht'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+
+@app.route('/api/chat/messages/<int:message_id>', methods=['PUT'])
+@login_required
+def api_edit_message(message_id):
+    """Edit a message (only message author can do this)"""
+    try:
+        message = ChatMessage.query.get(message_id)
+        if not message:
+            return jsonify({'success': False, 'message': 'Nachricht nicht gefunden'}), 404
+
+        # Check if current user is message author
+        if message.user_id != current_user.id:
+            return jsonify({'success': False, 'message': 'Sie können nur Ihre eigenen Nachrichten bearbeiten'}), 403
+
+        data = request.get_json()
+        new_text = data.get('message', '').strip()
+
+        if not new_text:
+            return jsonify({'success': False, 'message': 'Nachricht darf nicht leer sein'}), 400
+
+        if len(new_text) > 3000:
+            return jsonify({'success': False, 'message': 'Nachricht ist zu lang (max. 3000 Zeichen)'}), 400
+
+        message.message = new_text
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Nachricht erfolgreich bearbeitet'
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
 
 # Error handlers
 @app.errorhandler(404)

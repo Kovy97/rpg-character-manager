@@ -96,13 +96,177 @@
     </div>
 
     <div class="chat-container">
-        <div class="chat-header">
-            <h3>💬 Chat</h3>
-        </div>
-        <div class="chat-content">
-            <div class="chat-placeholder">
-                Chat-Funktion wird hier implementiert...
+        <!-- Chat Tabs (Rooms) -->
+        <div class="chat-tabs">
+            <div class="chat-tab-controls">
+                <button class="btn btn-sm" id="joinRoomBtn">📥 Beitreten</button>
+                <button class="btn btn-sm" id="createRoomBtn">➕ Erstellen</button>
+                <button class="btn btn-sm" id="chatSettingsBtn">⚙️ Settings</button>
             </div>
+            <div class="chat-room-tabs" id="chatRoomTabs">
+                <!-- Dynamically populated room tabs -->
+            </div>
+        </div>
+
+        <!-- Active Chat Content -->
+        <div class="chat-content-wrapper">
+            <div class="chat-header">
+                <h4 id="activeRoomName">Allgemein</h4>
+                <button class="btn btn-sm" id="memberListBtn">👥</button>
+            </div>
+
+            <div class="chat-messages" id="chatMessages">
+                <div class="chat-placeholder">
+                    Wähle einen Raum oder erstelle einen neuen Raum...
+                </div>
+            </div>
+
+            <div class="chat-input-section">
+                <div class="chat-input-wrapper">
+                    <input type="text" id="chatInput" placeholder="Nachricht schreiben..." maxlength="3000" disabled>
+                    <button id="sendBtn" disabled>📤</button>
+                    <button id="shareCharBtn" disabled>📋</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Member Sidebar (toggleable) -->
+        <div class="member-sidebar hidden" id="memberSidebar">
+            <div class="member-header">
+                <h5>Mitglieder</h5>
+                <button class="btn btn-sm" id="closeMemberBtn">✕</button>
+            </div>
+            <div class="member-list" id="memberList">
+                <!-- Populated dynamically -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Room Creation Modal -->
+<div class="modal" id="createRoomModal">
+    <div class="modal-content">
+        <h3>🏠 Neuen Raum erstellen</h3>
+        <form id="createRoomForm">
+            <input type="text" name="roomName" placeholder="Raumname" required>
+            <textarea name="description" placeholder="Beschreibung (optional)"></textarea>
+            <label>
+                <input type="checkbox" name="isPrivate" id="isPrivateCheck"> Privater Raum (Passwort erforderlich)
+            </label>
+            <input type="password" name="password" placeholder="Passwort (optional)" class="hidden" id="roomPassword">
+            <div class="modal-actions">
+                <button type="submit" class="btn" id="createRoomSubmit">Erstellen</button>
+                <button type="button" class="btn neutral" onclick="closeModal('createRoomModal')">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Join Room Modal -->
+<div class="modal" id="joinRoomModal">
+    <div class="modal-content">
+        <h3>📥 Raum beitreten</h3>
+        <div class="available-rooms" id="availableRooms">
+            <!-- Populated with available rooms -->
+        </div>
+        <button type="button" class="btn neutral" onclick="closeModal('joinRoomModal')">Schließen</button>
+    </div>
+</div>
+
+<!-- Password Entry Modal -->
+<div class="modal" id="passwordModal">
+    <div class="modal-content">
+        <h3>🔐 Passwort eingeben</h3>
+        <form id="passwordForm">
+            <input type="hidden" name="roomId">
+            <input type="password" name="password" placeholder="Raumpasswort" required>
+            <div class="modal-actions">
+                <button type="submit" class="btn">Beitreten</button>
+                <button type="button" class="btn neutral" onclick="closeModal('passwordModal')">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Delete Message Modal -->
+<div class="modal" id="deleteMessageModal">
+    <div class="modal-content">
+        <h3>🗑️ Nachricht löschen</h3>
+        <p>Sind Sie sicher, dass Sie diese Nachricht löschen möchten?</p>
+        <div class="message-preview" id="deleteMessagePreview"></div>
+        <div class="modal-actions">
+            <button type="button" class="btn danger" id="confirmDeleteBtn">Löschen</button>
+            <button type="button" class="btn neutral" onclick="closeModal('deleteMessageModal')">Abbrechen</button>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Message Modal -->
+<div class="modal" id="editMessageModal">
+    <div class="modal-content">
+        <h3>✏️ Nachricht bearbeiten</h3>
+        <form id="editMessageForm">
+            <input type="hidden" id="editMessageId">
+            <textarea id="editMessageText" placeholder="Nachricht bearbeiten..." required maxlength="3000" rows="4"></textarea>
+            <div class="char-counter">
+                <span id="editCharCount">0</span>/3000 Zeichen
+            </div>
+            <div class="modal-actions">
+                <button type="submit" class="btn">Speichern</button>
+                <button type="button" class="btn neutral" onclick="closeModal('editMessageModal')">Abbrechen</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Chat Settings Modal -->
+<div class="modal" id="chatSettingsModal">
+    <div class="modal-content" style="max-width: 600px;">
+        <h3>⚙️ Chat Settings</h3>
+        <div class="settings-grid">
+            <div class="setting-group">
+                <label>📝 Normale Textfarbe</label>
+                <input type="color" id="normalTextColor" value="#e9eef3">
+            </div>
+
+            <div class="setting-group">
+                <label>💬 „Sprechen" Textfarbe (Anführungszeichen)</label>
+                <input type="color" id="quoteTextColor" value="#4ec9b0">
+            </div>
+
+            <div class="setting-group">
+                <label>📏 Schriftgröße</label>
+                <input type="range" id="fontSize" min="10" max="24" value="14">
+                <span id="fontSizeValue">14px</span>
+            </div>
+
+            <div class="setting-group">
+                <label>🔤 Schriftart</label>
+                <select id="fontFamily">
+                    <option value="Inter, 'Segoe UI', Arial, sans-serif">Standard (Inter)</option>
+                    <option value="'Times New Roman', serif">Times New Roman</option>
+                    <option value="'Arial', sans-serif">Arial</option>
+                    <option value="'Courier New', monospace">Courier New</option>
+                    <option value="'Georgia', serif">Georgia</option>
+                    <option value="'Verdana', sans-serif">Verdana</option>
+                    <option value="'Comic Sans MS', cursive">Comic Sans MS</option>
+                </select>
+            </div>
+
+            <div class="setting-group preview-group">
+                <label>👁️ Vorschau</label>
+                <div class="message-preview" id="messagePreview">
+                    <div class="message-content">
+                        Das ist ein normaler Text. „Das ist gesprochener Text in deutschen Anführungszeichen."
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" class="btn" id="saveSettings">💾 Speichern</button>
+            <button type="button" class="btn neutral" id="resetSettings">🔄 Zurücksetzen</button>
+            <button type="button" class="btn neutral" onclick="closeModal('chatSettingsModal')">Schließen</button>
         </div>
     </div>
 </div>
@@ -130,7 +294,7 @@
 
     let tabs = [];
     let current = null;
-    let currentUser = {{ 'true' if current_user.is_authenticated else 'false' }};
+    let currentUser = {{ current_user.to_dict() | tojson if current_user.is_authenticated else 'null' }};
 
     // Authentication toggle functionality
     const showRegister = $('#showRegister');
@@ -851,6 +1015,946 @@
             alert('Netzwerkfehler beim Löschen.');
         }
     };
+
+    // Chat System Implementation
+    class ChatManager {
+        constructor() {
+            this.activeRoom = null;
+            this.rooms = [];
+            this.messages = new Map();
+            this.members = new Map();
+            this.pollInterval = null;
+            this.lastMessageId = new Map();
+
+            this.initEventListeners();
+            this.loadUserRooms();
+            this.loadChatSettings();
+        }
+
+        initEventListeners() {
+            console.log('Initializing event listeners...');
+
+            // Modal controls
+            const createBtn = $('#createRoomBtn');
+            const joinBtn = $('#joinRoomBtn');
+            const memberBtn = $('#memberListBtn');
+
+            if (createBtn) {
+                createBtn.addEventListener('click', () => {
+                    console.log('Create room button clicked');
+                    this.showCreateRoomModal();
+                });
+            } else console.error('Create room button not found');
+
+            if (joinBtn) {
+                joinBtn.addEventListener('click', () => this.showJoinRoomModal());
+            } else console.error('Join room button not found');
+
+            if (memberBtn) {
+                memberBtn.addEventListener('click', () => this.toggleMemberSidebar());
+            } else console.error('Member list button not found');
+
+            const closeMemberBtn = $('#closeMemberBtn');
+            if (closeMemberBtn) {
+                closeMemberBtn.addEventListener('click', () => this.toggleMemberSidebar());
+            }
+
+            const settingsBtn = $('#chatSettingsBtn');
+            if (settingsBtn) {
+                settingsBtn.addEventListener('click', () => this.showChatSettings());
+            } else console.error('Chat settings button not found');
+
+            // Form submissions
+            const createForm = $('#createRoomForm');
+            const passwordForm = $('#passwordForm');
+            const editMessageForm = $('#editMessageForm');
+            const confirmDeleteBtn = $('#confirmDeleteBtn');
+            const editMessageText = $('#editMessageText');
+
+            if (createForm) {
+                createForm.addEventListener('submit', (e) => {
+                    console.log('Form submit event triggered');
+                    this.handleCreateRoom(e);
+                });
+
+                // Also add direct button listener as backup
+                const submitBtn = $('#createRoomSubmit');
+                if (submitBtn) {
+                    submitBtn.addEventListener('click', (e) => {
+                        console.log('Submit button clicked directly');
+                        e.preventDefault();
+                        this.handleCreateRoom(e);
+                    });
+                }
+            } else console.error('Create room form not found');
+
+            if (passwordForm) {
+                passwordForm.addEventListener('submit', (e) => {
+                    this.handlePasswordSubmit(e);
+                });
+
+                // Also add a click event to the submit button as backup
+                const submitBtn = passwordForm.querySelector('button[type="submit"]');
+                if (submitBtn) {
+                    submitBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const form = e.target.closest('form');
+                        if (form) {
+                            const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+                            form.dispatchEvent(submitEvent);
+                        }
+                    });
+                }
+            } else {
+                console.error('Password form not found');
+            }
+
+            // Message modal handlers
+            if (editMessageForm) {
+                editMessageForm.addEventListener('submit', (e) => this.handleEditMessageSubmit(e));
+
+                // Also add direct button click handler as backup
+                const editSubmitBtn = editMessageForm.querySelector('button[type="submit"]');
+                if (editSubmitBtn) {
+                    editSubmitBtn.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const form = e.target.closest('form');
+                        if (form) {
+                            const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+                            form.dispatchEvent(submitEvent);
+                        }
+                    });
+                }
+            }
+
+            if (confirmDeleteBtn) {
+                confirmDeleteBtn.addEventListener('click', () => this.handleConfirmDelete());
+            }
+
+            if (editMessageText) {
+                editMessageText.addEventListener('input', (e) => this.updateCharCount(e));
+            }
+
+            // Private room checkbox
+            const privateCheck = $('#isPrivateCheck');
+            if (privateCheck) {
+                privateCheck.addEventListener('change', (e) => {
+                    const passwordField = $('#roomPassword');
+                    if (passwordField) {
+                        passwordField.classList.toggle('hidden', !e.target.checked);
+                        passwordField.required = e.target.checked;
+                    }
+                });
+            }
+
+            // Chat input
+            const chatInput = $('#chatInput');
+            const sendBtn = $('#sendBtn');
+            const shareBtn = $('#shareCharBtn');
+
+            if (chatInput) {
+                chatInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        this.sendMessage();
+                    }
+                });
+            }
+
+            if (sendBtn) {
+                sendBtn.addEventListener('click', () => this.sendMessage());
+            }
+
+            if (shareBtn) {
+                shareBtn.addEventListener('click', () => this.shareCurrentCharacter());
+            }
+
+            // Chat Settings Event Listeners
+            const saveSettingsBtn = $('#saveSettings');
+            const resetSettingsBtn = $('#resetSettings');
+            const fontSizeSlider = $('#fontSize');
+            const fontSizeValue = $('#fontSizeValue');
+
+            if (saveSettingsBtn) {
+                saveSettingsBtn.addEventListener('click', () => this.saveChatSettings());
+            }
+
+            if (resetSettingsBtn) {
+                resetSettingsBtn.addEventListener('click', () => this.resetChatSettings());
+            }
+
+            if (fontSizeSlider && fontSizeValue) {
+                fontSizeSlider.addEventListener('input', (e) => {
+                    fontSizeValue.textContent = e.target.value + 'px';
+                    this.updatePreview();
+                });
+            }
+
+            // Preview update listeners
+            ['normalTextColor', 'quoteTextColor', 'fontFamily'].forEach(id => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.addEventListener('input', () => this.updatePreview());
+                }
+            });
+
+            console.log('Event listeners initialized');
+        }
+
+        async loadUserRooms() {
+            try {
+                const response = await fetch('/api/chat/rooms');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.rooms = data.rooms;
+                    this.renderRoomTabs();
+                }
+            } catch (err) {
+                console.error('Error loading rooms:', err);
+            }
+        }
+
+        renderRoomTabs() {
+            const container = $('#chatRoomTabs');
+            container.innerHTML = '';
+
+            this.rooms.forEach(room => {
+                const tab = document.createElement('div');
+                tab.className = `chat-room-tab ${this.activeRoom === room.id ? 'active' : ''}`;
+                tab.innerHTML = `
+                    <span>${room.name} ${room.has_password ? '🔒' : ''}</span>
+                    <button class="close-tab" onclick="chatManager.leaveRoom(${room.id})">&times;</button>
+                `;
+                tab.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('close-tab')) return;
+                    this.switchToRoom(room.id);
+                });
+                container.appendChild(tab);
+            });
+        }
+
+        async switchToRoom(roomId) {
+            if (this.activeRoom === roomId) return;
+
+            const room = this.rooms.find(r => r.id === roomId);
+            if (!room) return;
+
+            // Try to load messages first to check access
+            try {
+                const response = await fetch(`/api/chat/rooms/${roomId}/messages`);
+                if (response.status === 403) {
+                    // User is not a member - show password prompt if room has password
+                    if (room.has_password) {
+                        this.showPasswordModal(roomId);
+                        return;
+                    } else {
+                        // Public room - try to join automatically
+                        await this.joinRoom(roomId);
+                        return;
+                    }
+                } else if (!response.ok) {
+                    alert('Fehler beim Zugriff auf den Raum');
+                    return;
+                }
+
+                // Success - user has access
+                this.activeRoom = roomId;
+                $('#activeRoomName').textContent = room.name;
+                $('#chatInput').disabled = false;
+                $('#sendBtn').disabled = false;
+                $('#shareCharBtn').disabled = false;
+
+                this.renderRoomTabs();
+                await this.loadRoomMessages(roomId);
+                await this.loadRoomMembers(roomId);
+                this.startPolling();
+
+            } catch (err) {
+                console.error('Error checking room access:', err);
+                alert('Fehler beim Zugriff auf den Raum');
+            }
+        }
+
+        async loadRoomMessages(roomId) {
+            try {
+                const response = await fetch(`/api/chat/rooms/${roomId}/messages`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.messages.set(roomId, data.messages);
+                    this.renderMessages();
+                    if (data.messages.length > 0) {
+                        this.lastMessageId.set(roomId, data.messages[data.messages.length - 1].id);
+                    }
+                }
+            } catch (err) {
+                console.error('Error loading messages:', err);
+            }
+        }
+
+        renderMessages() {
+            const container = $('#chatMessages');
+            const messages = this.messages.get(this.activeRoom) || [];
+
+            if (messages.length === 0) {
+                container.innerHTML = '<div class="chat-placeholder">Noch keine Nachrichten...</div>';
+                return;
+            }
+
+            // Build HTML string directly with processed quotes
+            let html = '';
+            messages.forEach(msg => {
+                const isOwn = msg.user_id === {{ current_user.id if current_user.is_authenticated else 'null' }};
+                const timestamp = new Date(msg.timestamp).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+
+                // Process message text for quotes - SIMPLE VERSION
+                let messageText = this.escapeHtml(msg.message);
+
+                                    // Deutsche Anführungszeichen
+                        const OPEN  = '\u201E'; // „ (U+201E)
+                        const CLOSE1 = '\u201C'; // “ (U+201C) – häufig in „…“
+                        const CLOSE2 = '\u201D'; // ” (U+201D) – kommt real oft vor
+
+                        // „ … “  bzw. „ … ”
+                        const germanPattern = new RegExp(`${OPEN}([\\s\\S]*?)(${CLOSE1}|${CLOSE2})`, 'gu');
+                        messageText = messageText.replace(
+                        germanPattern,
+                        `<span class="quote-text">${OPEN}$1$2</span>`
+                        );
+
+                        // Fallback: gerade ASCII-Anführungszeichen " … "
+                        messageText = messageText.replace(
+                        /"([\s\S]*?)"/gu,
+                        '<span class="quote-text">"$1"</span>'
+                        );
+
+
+                html += `
+                    <div class="message ${isOwn ? 'own' : ''}" data-message-id="${msg.id}">
+                        <div class="message-header">
+                            <span>${msg.username}</span>
+                            <span>${timestamp}</span>
+                            ${isOwn ? `
+                                <div class="message-actions">
+                                    <button class="btn-message-edit" onclick="chatManager.editMessage(${msg.id})" title="Bearbeiten">✏️</button>
+                                    <button class="btn-message-delete" onclick="chatManager.deleteMessage(${msg.id})" title="Löschen">🗑️</button>
+                                </div>
+                            ` : ''}
+                        </div>
+                        <div class="message-content">${messageText}</div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        renderMessage(msg) {
+            const isOwn = msg.user_id === {{ current_user.id if current_user.is_authenticated else 'null' }};
+            const timestamp = new Date(msg.timestamp).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
+
+            return `
+                <div class="message ${isOwn ? 'own' : ''}" data-message-id="${msg.id}">
+                    <div class="message-header">
+                        <span>${msg.username}</span>
+                        <span>${timestamp}</span>
+                        ${isOwn ? `
+                            <div class="message-actions">
+                                <button class="btn-message-edit" onclick="chatManager.editMessage(${msg.id})" title="Bearbeiten">✏️</button>
+                                <button class="btn-message-delete" onclick="chatManager.deleteMessage(${msg.id})" title="Löschen">🗑️</button>
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="message-content" data-original-text="${this.escapeHtml(msg.message)}">${msg.message}</div>
+                </div>
+            `;
+        }
+
+        formatMessageText(text) {
+            // VIEL EINFACHER - escape erst den Inhalt zwischen quotes
+            text = text.replace(/\u201E([^\u201C]*?)\u201C/g, (match, content) => {
+                const safeContent = this.escapeHtml(content);
+                return `<span class="quote-text">\u201E${safeContent}\u201C</span>`;
+            });
+
+            text = text.replace(/"([^"]*?)"/g, (match, content) => {
+                const safeContent = this.escapeHtml(content);
+                return `<span class="quote-text">"${safeContent}"</span>`;
+            });
+
+            // Escape the rest of the text that's not in quotes
+            return text;
+        }
+
+        escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async sendMessage() {
+            if (!this.activeRoom) return;
+
+            const input = $('#chatInput');
+            const message = input.value.trim();
+
+            if (!message) return;
+
+            try {
+                const response = await fetch(`/api/chat/rooms/${this.activeRoom}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message })
+                });
+
+                if (response.ok) {
+                    input.value = '';
+                    await this.loadRoomMessages(this.activeRoom);
+                } else {
+                    const error = await response.json();
+                    alert(`Fehler: ${error.message}`);
+                }
+            } catch (err) {
+                alert('Fehler beim Senden der Nachricht');
+                console.error(err);
+            }
+        }
+
+        async loadRoomMembers(roomId) {
+            try {
+                const response = await fetch(`/api/chat/rooms/${roomId}/members`);
+                if (response.ok) {
+                    const data = await response.json();
+                    this.members.set(roomId, data.members);
+                    this.renderMembers();
+                }
+            } catch (err) {
+                console.error('Error loading members:', err);
+            }
+        }
+
+        renderMembers() {
+            const container = $('#memberList');
+            const members = this.members.get(this.activeRoom) || [];
+            const currentRoom = this.rooms.find(r => r.id === this.activeRoom);
+
+            // Check if current user is room creator
+            const isAdmin = currentRoom && currentUser && currentRoom.created_by === currentUser.id;
+
+            container.innerHTML = members.map(member => {
+                const canKick = isAdmin && member.user_id !== currentUser.id; // Can't kick yourself
+
+                return `
+                    <div class="member-item">
+                        <div class="member-info">
+                            <span class="member-name">${member.username}</span>
+                            <span class="member-role ${member.role}">${member.role}</span>
+                        </div>
+                        ${canKick ? `<button class="btn-kick" onclick="chatManager.kickMember(${member.user_id})" title="Mitglied entfernen">👢</button>` : ''}
+                    </div>
+                `;
+            }).join('');
+        }
+
+        async kickMember(userId) {
+            if (!confirm('Mitglied wirklich aus dem Raum entfernen?')) return;
+
+            try {
+                const response = await fetch(`/api/chat/rooms/${this.activeRoom}/kick`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ user_id: userId })
+                });
+
+                if (response.ok) {
+                    await this.loadRoomMembers(this.activeRoom);
+                    alert('Mitglied erfolgreich entfernt');
+                } else {
+                    const error = await response.json();
+                    alert(`Fehler: ${error.message}`);
+                }
+            } catch (err) {
+                alert('Fehler beim Entfernen des Mitglieds');
+                console.error(err);
+            }
+        }
+
+        deleteMessage(messageId) {
+            // Store message ID for later use
+            this.pendingDeleteId = messageId;
+
+            // Find the message and show preview
+            const messages = this.messages.get(this.activeRoom) || [];
+            const message = messages.find(m => m.id === messageId);
+
+            if (message) {
+                const preview = $('#deleteMessagePreview');
+                preview.innerHTML = `<div class="message-preview-content">"${message.message.substring(0, 100)}${message.message.length > 100 ? '...' : ''}"</div>`;
+            }
+
+            openModal('deleteMessageModal');
+        }
+
+        async handleConfirmDelete() {
+            if (!this.pendingDeleteId) return;
+
+            try {
+                const response = await fetch(`/api/chat/messages/${this.pendingDeleteId}`, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    await this.loadRoomMessages(this.activeRoom);
+                    closeModal('deleteMessageModal');
+                } else {
+                    const error = await response.json();
+                    alert(`Fehler: ${error.message}`);
+                }
+            } catch (err) {
+                alert('Fehler beim Löschen der Nachricht');
+                console.error(err);
+            } finally {
+                this.pendingDeleteId = null;
+            }
+        }
+
+        editMessage(messageId) {
+            // Find the message
+            const messages = this.messages.get(this.activeRoom) || [];
+            const message = messages.find(m => m.id === messageId);
+
+            if (message) {
+                // Populate the edit form
+                $('#editMessageId').value = messageId;
+                $('#editMessageText').value = message.message;
+                this.updateCharCount({ target: $('#editMessageText') });
+
+                openModal('editMessageModal');
+                // Focus on textarea
+                setTimeout(() => $('#editMessageText').focus(), 100);
+            }
+        }
+
+        async handleEditMessageSubmit(e) {
+            e.preventDefault();
+            const messageId = parseInt($('#editMessageId').value);
+            const newText = $('#editMessageText').value.trim();
+
+            if (!newText) {
+                alert('Nachricht darf nicht leer sein');
+                return;
+            }
+
+            if (!messageId) {
+                alert('Keine Nachrichten-ID gefunden');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/chat/messages/${messageId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: newText })
+                });
+
+                if (response.ok) {
+                    // Success - close modal and reload
+                    closeModal('editMessageModal');
+                    $('#editMessageForm')[0].reset();
+                    await this.loadRoomMessages(this.activeRoom);
+                } else {
+                    // Server error
+                    const error = await response.json();
+                    alert(`Server-Fehler: ${error.message}`);
+                }
+            } catch (err) {
+                // Network error - but edit might have worked
+                closeModal('editMessageModal');
+                $('#editMessageForm')[0].reset();
+                await this.loadRoomMessages(this.activeRoom);
+            }
+        }
+
+        updateCharCount(e) {
+            const count = e.target.value.length;
+            $('#editCharCount').textContent = count;
+
+            // Change color if approaching limit
+            const counter = $('#editCharCount');
+            if (count > 2700) {
+                counter.style.color = 'var(--warn)';
+            } else if (count > 2400) {
+                counter.style.color = 'var(--gold)';
+            } else {
+                counter.style.color = 'var(--muted)';
+            }
+        }
+
+        toggleMemberSidebar() {
+            const sidebar = $('#memberSidebar');
+            sidebar.classList.toggle('hidden');
+        }
+
+        showCreateRoomModal() {
+            openModal('createRoomModal');
+        }
+
+        showJoinRoomModal() {
+            this.loadAvailableRooms();
+            openModal('joinRoomModal');
+        }
+
+        async loadAvailableRooms() {
+            try {
+                const response = await fetch('/api/chat/rooms');
+                if (response.ok) {
+                    const data = await response.json();
+                    this.renderAvailableRooms(data.rooms);
+                }
+            } catch (err) {
+                console.error('Error loading available rooms:', err);
+            }
+        }
+
+        renderAvailableRooms(rooms) {
+            const container = $('#availableRooms');
+            container.innerHTML = rooms.map(room => `
+                <div class="room-item" onclick="chatManager.joinRoom(${room.id})">
+                    <div class="room-name">${room.name} ${room.has_password ? '🔒' : ''}</div>
+                    ${room.description ? `<div class="room-description">${room.description}</div>` : ''}
+                    <div class="room-meta">
+                        <span>👥 ${room.member_count} Mitglieder</span>
+                        <span>${room.is_public ? 'Öffentlich' : 'Privat'}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        async handleCreateRoom(e) {
+            e.preventDefault();
+            console.log('Create room form submitted');
+
+            // Get form element properly
+            const form = e.target.tagName === 'FORM' ? e.target : $('#createRoomForm');
+            const formData = new FormData(form);
+            const isPrivate = formData.get('isPrivate');
+
+            const roomData = {
+                name: formData.get('roomName'),
+                description: formData.get('description'),
+                password: isPrivate ? formData.get('password') : ''
+            };
+
+            console.log('Room data:', roomData);
+
+            try {
+                const response = await fetch('/api/chat/rooms', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(roomData)
+                });
+
+                console.log('Response status:', response.status);
+
+                if (response.ok) {
+                    const result = await response.json();
+                    console.log('Room created:', result);
+                    closeModal('createRoomModal');
+                    form.reset();
+                    await this.loadUserRooms();
+                    alert('Raum erfolgreich erstellt!');
+                } else {
+                    const error = await response.json();
+                    console.error('API Error:', error);
+                    alert(`Fehler: ${error.message}`);
+                }
+            } catch (err) {
+                console.error('Network error:', err);
+                alert('Fehler beim Erstellen des Raums');
+            }
+        }
+
+        async joinRoom(roomId, password = '') {
+            const room = this.rooms.find(r => r.id === roomId);
+            if (!room) {
+                // Room not in our list, need to check if it has password
+                if (!password) {
+                    this.showPasswordModal(roomId);
+                    return;
+                }
+            }
+
+            try {
+                const response = await fetch(`/api/chat/rooms/${roomId}/join`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (response.ok) {
+                    closeModal('joinRoomModal');
+                    closeModal('passwordModal');
+                    await this.loadUserRooms();
+                    // Switch to the joined room
+                    await this.switchToRoom(roomId);
+                } else {
+                    const error = await response.json();
+                    if (error.message.includes('Passwort')) {
+                        this.showPasswordModal(roomId);
+                    } else {
+                        alert(`Fehler: ${error.message}`);
+                    }
+                }
+            } catch (err) {
+                alert('Fehler beim Beitreten des Raums');
+                console.error(err);
+            }
+        }
+
+        showPasswordModal(roomId) {
+            $('#passwordForm input[name="roomId"]').value = roomId;
+            closeModal('joinRoomModal');
+            openModal('passwordModal');
+        }
+
+        async handlePasswordSubmit(e) {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const roomId = parseInt(formData.get('roomId'));
+            const password = formData.get('password');
+
+            try {
+                await this.joinRoom(roomId, password);
+                e.target.reset();
+            } catch (err) {
+                console.error('Error in handlePasswordSubmit:', err);
+            }
+        }
+
+        async leaveRoom(roomId) {
+            if (!confirm('Raum wirklich verlassen?')) return;
+
+            try {
+                const response = await fetch(`/api/chat/rooms/${roomId}/leave`, {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    if (this.activeRoom === roomId) {
+                        this.activeRoom = null;
+                        $('#activeRoomName').textContent = 'Allgemein';
+                        $('#chatMessages').innerHTML = '<div class="chat-placeholder">Wähle einen Raum...</div>';
+                        $('#chatInput').disabled = true;
+                        $('#sendBtn').disabled = true;
+                        $('#shareCharBtn').disabled = true;
+                        this.stopPolling();
+                    }
+                    await this.loadUserRooms();
+                } else {
+                    const error = await response.json();
+                    alert(`Fehler: ${error.message}`);
+                }
+            } catch (err) {
+                alert('Fehler beim Verlassen des Raums');
+                console.error(err);
+            }
+        }
+
+        shareCurrentCharacter() {
+            const activePanel = getActivePanel();
+            if (!activePanel) {
+                alert('Kein Charakter aktiv');
+                return;
+            }
+
+            const data = getPanelData(activePanel);
+            const shareText = `[Charakter: ${data.name}] STR:${data.staerke} GES:${data.geschicklichkeit} WAH:${data.wahrnehmung} WIL:${data.willenskraft}`;
+
+            $('#chatInput').value = shareText;
+        }
+
+        startPolling() {
+            this.stopPolling();
+            this.pollInterval = setInterval(() => {
+                if (this.activeRoom) {
+                    this.pollForNewMessages();
+                }
+            }, 3000);
+        }
+
+        stopPolling() {
+            if (this.pollInterval) {
+                clearInterval(this.pollInterval);
+                this.pollInterval = null;
+            }
+        }
+
+        async pollForNewMessages() {
+            if (!this.activeRoom) return;
+
+            try {
+                const response = await fetch(`/api/chat/rooms/${this.activeRoom}/messages`);
+                if (response.ok) {
+                    const data = await response.json();
+                    const currentMessages = this.messages.get(this.activeRoom) || [];
+
+                    if (data.messages.length > currentMessages.length) {
+                        this.messages.set(this.activeRoom, data.messages);
+                        this.renderMessages();
+                    }
+                }
+            } catch (err) {
+                console.error('Polling error:', err);
+            }
+        }
+
+        // Chat Settings Methods
+        showChatSettings() {
+            this.loadChatSettingsUI();
+            openModal('chatSettingsModal');
+        }
+
+        async loadChatSettingsUI() {
+            const settings = await this.getChatSettings();
+            $('#normalTextColor').value = settings.normalColor;
+            $('#quoteTextColor').value = settings.quoteColor;
+            $('#fontSize').value = settings.fontSize;
+            $('#fontSizeValue').textContent = settings.fontSize + 'px';
+            $('#fontFamily').value = settings.fontFamily;
+            this.updatePreview();
+        }
+
+        updatePreview() {
+            const preview = $('#messagePreview .message-content');
+            const normalColor = $('#normalTextColor').value;
+            const quoteColor = $('#quoteTextColor').value;
+            const fontSize = $('#fontSize').value + 'px';
+            const fontFamily = $('#fontFamily').value;
+
+            preview.style.color = normalColor;
+            preview.style.fontSize = fontSize;
+            preview.style.fontFamily = fontFamily;
+
+            // Update quote text color
+            const quoteSpan = preview.querySelector('.quote-text') || document.createElement('span');
+            if (!quoteSpan.parentNode) {
+                quoteSpan.className = 'quote-text';
+                quoteSpan.innerHTML = '„Das ist gesprochener Text in deutschen Anführungszeichen."';
+                preview.innerHTML = 'Das ist ein normaler Text. ' + quoteSpan.outerHTML;
+            }
+            quoteSpan.style.color = quoteColor;
+        }
+
+        async saveChatSettings() {
+            const settings = {
+                normalColor: $('#normalTextColor').value,
+                quoteColor: $('#quoteTextColor').value,
+                fontSize: parseInt($('#fontSize').value),
+                fontFamily: $('#fontFamily').value
+            };
+
+            try {
+                const response = await fetch('/api/user/chat-settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(settings)
+                });
+
+                if (response.ok) {
+                    this.applyChatSettings(settings);
+                    closeModal('chatSettingsModal');
+                    alert('Settings erfolgreich gespeichert!');
+                } else {
+                    const error = await response.json();
+                    alert(`Fehler beim Speichern: ${error.message}`);
+                }
+            } catch (err) {
+                console.error('Error saving settings:', err);
+                alert('Netzwerkfehler beim Speichern der Settings');
+            }
+        }
+
+        async resetChatSettings() {
+            const defaults = this.getDefaultSettings();
+
+            try {
+                const response = await fetch('/api/user/chat-settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(defaults)
+                });
+
+                if (response.ok) {
+                    this.applyChatSettings(defaults);
+                    await this.loadChatSettingsUI();
+                    alert('Settings zurückgesetzt!');
+                } else {
+                    const error = await response.json();
+                    alert(`Fehler beim Zurücksetzen: ${error.message}`);
+                }
+            } catch (err) {
+                console.error('Error resetting settings:', err);
+                alert('Netzwerkfehler beim Zurücksetzen der Settings');
+            }
+        }
+
+        async getChatSettings() {
+            try {
+                const response = await fetch('/api/user/chat-settings');
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.settings;
+                } else {
+                    console.error('Failed to load settings, using defaults');
+                    return this.getDefaultSettings();
+                }
+            } catch (err) {
+                console.error('Error loading settings:', err);
+                return this.getDefaultSettings();
+            }
+        }
+
+        getDefaultSettings() {
+            return {
+                normalColor: '#e9eef3',
+                quoteColor: '#4ec9b0',
+                fontSize: 14,
+                fontFamily: "Inter, 'Segoe UI', Arial, sans-serif"
+            };
+        }
+
+        applyChatSettings(settings) {
+            const root = document.documentElement;
+            root.style.setProperty('--chat-normal-color', settings.normalColor);
+            root.style.setProperty('--chat-quote-color', settings.quoteColor);
+            root.style.setProperty('--chat-font-size', settings.fontSize + 'px');
+            root.style.setProperty('--chat-font-family', settings.fontFamily);
+        }
+
+        async loadChatSettings() {
+            const settings = await this.getChatSettings();
+            this.applyChatSettings(settings);
+        }
+    }
+
+    // Modal helper functions
+    window.openModal = function(modalId) {
+        document.getElementById(modalId).classList.add('open');
+    };
+
+    window.closeModal = function(modalId) {
+        document.getElementById(modalId).classList.remove('open');
+    };
+
+    // Initialize chat manager
+    console.log('Current user:', currentUser);
+    if (currentUser) {
+        console.log('Initializing ChatManager...');
+        window.chatManager = new ChatManager();
+        console.log('ChatManager initialized:', window.chatManager);
+    } else {
+        console.log('User not logged in, ChatManager not initialized');
+    }
 })();
 </script>
 {% endblock %}

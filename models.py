@@ -14,8 +14,16 @@ class User(UserMixin, db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Chat settings stored as JSON
+    chat_settings = db.Column(db.Text, default='{"normalColor": "#e9eef3", "quoteColor": "#4ec9b0", "fontSize": 14, "fontFamily": "Inter, \'Segoe UI\', Arial, sans-serif"}')
+
     # Relationship to characters
     characters = db.relationship('Character', backref='owner', lazy=True, cascade='all, delete-orphan')
+
+    # Chat relationships
+    chat_rooms = db.relationship('ChatRoom', backref='creator', lazy='dynamic')
+    room_memberships = db.relationship('RoomMember', backref='user', lazy='dynamic')
+    messages = db.relationship('ChatMessage', backref='author', lazy='dynamic')
 
     def set_password(self, password):
         """Set password hash"""
@@ -25,11 +33,33 @@ class User(UserMixin, db.Model):
         """Check password against hash"""
         return check_password_hash(self.password_hash, password)
 
+    def get_chat_settings(self):
+        """Get chat settings as Python dict"""
+        try:
+            return json.loads(self.chat_settings) if self.chat_settings else {
+                "normalColor": "#e9eef3",
+                "quoteColor": "#4ec9b0",
+                "fontSize": 14,
+                "fontFamily": "Inter, 'Segoe UI', Arial, sans-serif"
+            }
+        except json.JSONDecodeError:
+            return {
+                "normalColor": "#e9eef3",
+                "quoteColor": "#4ec9b0",
+                "fontSize": 14,
+                "fontFamily": "Inter, 'Segoe UI', Arial, sans-serif"
+            }
+
+    def set_chat_settings(self, settings):
+        """Set chat settings from Python dict"""
+        self.chat_settings = json.dumps(settings) if settings else None
+
     def to_dict(self):
         return {
             'id': self.id,
             'username': self.username,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'chat_settings': self.get_chat_settings()
         }
 
     def __repr__(self):
@@ -166,7 +196,131 @@ def init_db(app):
             db.engine.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
             db.engine.execute('CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id)')
             db.engine.execute('CREATE INDEX IF NOT EXISTS idx_characters_name ON characters(name)')
+            # Chat indexes
+            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_chat_rooms_created_by ON chat_rooms(created_by)')
+            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_room_id ON chat_messages(room_id)')
+            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp)')
+            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id)')
+            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id)')
         except Exception as e:
             print(f"Index creation note: {e}")
 
+        # Create default "Allgemein" room if it doesn't exist
+        if not ChatRoom.query.filter_by(name='Allgemein').first():
+            default_room = ChatRoom(
+                name='Allgemein',
+                description='Öffentlicher Hauptraum für alle Spieler',
+                created_by=1,  # Will be created by first user
+                is_public=True
+            )
+            db.session.add(default_room)
+            db.session.commit()
+            print("Default 'Allgemein' room created!")
+
         print("Database initialized successfully!")
+
+
+class ChatRoom(db.Model):
+    __tablename__ = 'chat_rooms'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    password_hash = db.Column(db.String(255))  # Optional for private rooms
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_public = db.Column(db.Boolean, default=True)
+    max_members = db.Column(db.Integer, default=50)
+
+    # Relationships
+    messages = db.relationship('ChatMessage', backref='room', lazy='dynamic', cascade='all, delete-orphan')
+    members = db.relationship('RoomMember', backref='room', lazy='dynamic', cascade='all, delete-orphan')
+
+    def set_password(self, password):
+        """Set password hash for private room"""
+        if password:
+            self.password_hash = generate_password_hash(password)
+            self.is_public = False
+        else:
+            self.password_hash = None
+            self.is_public = True
+
+    def check_password(self, password):
+        """Check password for private room"""
+        if self.password_hash:
+            return check_password_hash(self.password_hash, password)
+        return True  # Public room
+
+    def get_member_count(self):
+        """Get number of members in room"""
+        return self.members.count()
+
+    def is_member(self, user_id):
+        """Check if user is member of room"""
+        return self.members.filter_by(user_id=user_id).first() is not None
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'is_public': self.is_public,
+            'has_password': self.password_hash is not None,
+            'member_count': self.get_member_count(),
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+    def __repr__(self):
+        return f'<ChatRoom {self.name}>'
+
+
+class ChatMessage(db.Model):
+    __tablename__ = 'chat_messages'
+
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('chat_rooms.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    timestamp = db.Column(db.DateTime, default=datetime.utcnow)
+    message_type = db.Column(db.String(20), default='text')  # text, system, character_share
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'room_id': self.room_id,
+            'user_id': self.user_id,
+            'username': self.author.username if self.author else 'Unknown',
+            'message': self.message,
+            'message_type': self.message_type,
+            'timestamp': self.timestamp.isoformat() if self.timestamp else None
+        }
+
+    def __repr__(self):
+        return f'<ChatMessage {self.id} in Room {self.room_id}>'
+
+
+class RoomMember(db.Model):
+    __tablename__ = 'room_members'
+
+    id = db.Column(db.Integer, primary_key=True)
+    room_id = db.Column(db.Integer, db.ForeignKey('chat_rooms.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    joined_at = db.Column(db.DateTime, default=datetime.utcnow)
+    role = db.Column(db.String(20), default='member')  # admin, moderator, member
+
+    # Unique constraint to prevent duplicate memberships
+    __table_args__ = (db.UniqueConstraint('room_id', 'user_id', name='unique_room_member'),)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'room_id': self.room_id,
+            'user_id': self.user_id,
+            'username': self.user.username if self.user else 'Unknown',
+            'role': self.role,
+            'joined_at': self.joined_at.isoformat() if self.joined_at else None
+        }
+
+    def __repr__(self):
+        return f'<RoomMember User {self.user_id} in Room {self.room_id}>'
