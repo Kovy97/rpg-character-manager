@@ -38,21 +38,22 @@ h1 {
 /* Layout */
 .app-wrapper {
     display: flex;
-    gap: 20px;
-    max-width: 2000px;
+    gap: 16px;
+    max-width: 2200px;
     margin: 0 auto;
-    padding: 0 24px;
+    padding: 0 8px 0 8px;
 }
 
 /* Character List Sidebar */
 .character-list {
-    flex: 0 0 300px;
+    flex: 0 0 240px;
     background: var(--panel);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 16px;
+    padding: 12px;
     height: fit-content;
     margin-top: 60px;
+    margin-right: 8px;
 }
 
 .character-list h3 {
@@ -249,8 +250,9 @@ h1 {
 
 /* Main App */
 .app {
-    flex: 0 0 1100px;
-    max-width: 1100px;
+    flex: 1;
+    max-width: 1000px;
+    min-width: 750px;
 }
 
 .main-content {
@@ -324,7 +326,7 @@ h1 {
     display: flex;
     gap: 8px;
     align-items: center;
-    margin: 12px 0;
+    margin: 12px 0 0 0;
     flex-wrap: wrap;
 }
 
@@ -419,7 +421,7 @@ h1 {
 .grid {
     display: grid;
     gap: 16px;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1.25fr 0.75fr;
 }
 
 .compact-row {
@@ -463,6 +465,25 @@ select {
     outline: none;
 }
 
+/* Specific styles for attribute input fields */
+.staerke, .geschick, .wahrnehmung, .willenskraft {
+    width: 80px !important;
+    text-align: center;
+    font-weight: bold;
+    font-size: 18px;
+    min-width: 80px;
+    max-width: 80px;
+    padding: 12px 8px;
+    border: 2px solid var(--border);
+    border-radius: 10px;
+}
+
+.attr-input {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
 .row {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -473,7 +494,7 @@ select {
     display: flex;
     gap: 8px;
     flex-wrap: wrap;
-    margin-top: 10px;
+    margin-top: 16px;
 }
 
 /* Lists */
@@ -1016,12 +1037,19 @@ select {
 @media (max-width: 1400px) {
     .app-wrapper {
         flex-direction: column;
-        padding: 0 24px;
+        padding: 0 12px;
     }
 
     .app {
         flex: none;
         max-width: none;
+    }
+
+    .chat-container {
+        margin-left: 0;
+        margin-top: 20px;
+        flex: none;
+        max-height: 300px;
     }
 
     .grid {
@@ -1037,6 +1065,192 @@ select {
     }
 }
 
+/* New Character Layout */
+.character-layout {
+    display: grid;
+    grid-template-columns: 2fr 3fr;
+    gap: 20px;
+}
+
+.character-profile {
+    display: flex;
+    flex-direction: column;
+}
+
+.attributes-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+}
+
+.attr-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+}
+
+.attr-item label {
+    margin-bottom: 6px;
+    font-weight: bold;
+    color: var(--accent);
+}
+
+.gameplay-section {
+    min-height: 500px;
+}
+
+.save-section {
+    margin-top: 16px;
+    padding: 12px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    text-align: center;
+}
+
+.image-section {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    margin-top: 16px;
+    height: calc(100% - 32px);
+    justify-content: space-between;
+}
+
+.image-section h4 {
+    margin-bottom: 12px;
+    text-align: center;
+    color: var(--accent);
+    font-size: 16px;
+}
+
+/* Adjust image size for own column */
+.image-section .img-preview {
+    max-width: 320px;
+    max-height: 320px;
+}
+
+.image-bottom {
+    padding-bottom: 16px;
+    margin-top: 16px;
+}
+
+/* Scrollable states container */
+.zustaende-container {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px;
+    background: #0b1116;
+    margin-top: 12px;
+}
+
+.zustaende-container::-webkit-scrollbar {
+    width: 8px;
+}
+
+.zustaende-container::-webkit-scrollbar-track {
+    background: #171b26;
+    border-radius: 4px;
+}
+
+.zustaende-container::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 4px;
+}
+
+.zustaende-container::-webkit-scrollbar-thumb:hover {
+    background: var(--muted);
+}
+
+/* Better stat alignment with padding */
+.row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 8px;
+    justify-items: center;
+}
+
+/* Center align attribute items */
+.attr-str, .attr-dex, .attr-per, .attr-wil {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 100%;
+}
+
+.attr-str label, .attr-dex label, .attr-per label, .attr-wil label {
+    margin-bottom: 8px;
+    font-weight: bold;
+    color: var(--accent);
+    text-align: center;
+    font-size: 14px;
+}
+
+/* Add padding between character name and basis attribute title */
+.card h3:nth-of-type(2) {
+    margin-top: 24px;
+    text-align: center;
+    color: var(--accent);
+    font-size: 18px;
+}
+
+/* Add padding between stats and modifiers */
+.card h3 + .row {
+    margin-top: 16px;
+}
+
+.card .card {
+    margin-top: 16px;
+}
+
+/* Chat Container */
+.chat-container {
+    flex: 1;
+    min-width: 300px;
+    max-width: 500px;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    height: fit-content;
+    margin-top: 60px;
+    margin-left: 8px;
+    margin-right: 8px;
+    max-height: calc(100vh - 80px);
+    display: flex;
+    flex-direction: column;
+}
+
+.chat-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+}
+
+.chat-header h3 {
+    margin: 0;
+    color: var(--accent);
+    font-size: 18px;
+}
+
+.chat-content {
+    padding: 16px;
+    flex: 1;
+    overflow-y: auto;
+    min-height: 400px;
+}
+
+.chat-placeholder {
+    color: var(--muted);
+    font-style: italic;
+    text-align: center;
+    padding: 20px;
+}
+
 @media (max-width: 800px) {
     .grid,
     .compact-row {
@@ -1050,5 +1264,15 @@ select {
     .img-preview {
         width: 150px !important;
         height: 150px !important;
+    }
+
+    /* Stack character layout vertically on mobile */
+    .character-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .attributes-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
     }
 }

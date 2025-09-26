@@ -62,10 +62,15 @@ flake8 .
 - **Automatic derived value calculation**: Leben (health) and stress limits calculated from attributes
 
 ### Character System
-- **Base Attributes**: Stärke, Geschicklichkeit, Wahrnehmung, Willenskraft (1-20 scale)
+- **Base Attributes**: Stärke, Geschicklichkeit, Wahrnehmung, Willenskraft (1-10 scale)
 - **Derived Values**:
   - Leben (Health) = (Stärke + Willenskraft) × 2 + 10
   - Max Stress = Willenskraft × 3
+- **Dice Rolling System**:
+  - W20 + Effective Attribute Value = Total Result
+  - W20=1 always Critical Failure (red)
+  - W20=20 always Critical Success (gold)
+  - Normal rolls 2-19 show "Erfolg" in blue
 - **Image Storage**: Base64 encoded in database with drag-and-drop upload
 - **States & Effects**: JSON arrays stored as text fields
 
@@ -127,3 +132,72 @@ When working with this codebase:
 - Handle database transactions with proper rollback on errors
 - Test both SQLite (development) and PostgreSQL (production) compatibility
 - Maintain the automatic derived value calculation when updating character attributes
+
+## Current Status (September 2025)
+
+### Deployment Status: ✅ LIVE IN PRODUCTION
+- **Successfully deployed** on DigitalOcean App Platform
+- **Production URL**: Accessible via configured domain
+- **Database**: PostgreSQL in production, SQLite for local development
+- **Multi-user ready**: Users can register and manage their own characters
+
+### Core Features Implemented:
+✅ **User Authentication System**
+- Registration and login with secure password hashing
+- Session-based authentication with Flask-Login
+- User isolation (each user sees only their own characters)
+
+✅ **Character Management**
+- Create, edit, delete characters
+- Character loading into new tabs
+- Image upload and display (drag & drop)
+- Attribute system with progress bars (1-10 scale)
+- Automatic health/stress calculation
+
+✅ **Dice Rolling System**
+- W20 + Attribute modifier system
+- Critical success (20) = Gold display
+- Critical failure (1) = Red display
+- Normal results = Blue display
+- Roll history tracking
+
+✅ **User Interface**
+- German language interface
+- Dark tech theme with CSS custom properties
+- Responsive design
+- Tab-based character interface
+- Flash message system for user feedback
+
+### Technical Implementation:
+- **Backend**: Flask with SQLAlchemy ORM
+- **Frontend**: Server-side rendered Jinja2 with vanilla JavaScript
+- **Database**: SQLite (dev) → PostgreSQL (prod) automatic switching
+- **Image Storage**: Base64 encoded in database
+- **Deployment**: Gunicorn WSGI server on DigitalOcean
+
+### File Structure:
+```
+├── app.py              # Main Flask application
+├── models.py           # Database models (User, Character)
+├── config.py           # Environment configuration
+├── wsgi.py             # Production WSGI entry point
+├── Procfile            # DigitalOcean deployment config
+├── requirements.txt    # Python dependencies
+├── .python-version     # Python 3.11
+├── templates/
+│   ├── base.html       # Base template
+│   └── dashboard.html  # Main application interface
+├── static/
+│   ├── css/style.css   # All styling
+│   └── js/app.js       # JavaScript functionality
+└── CLAUDE.md           # This documentation
+```
+
+### Deployment Notes:
+- Uses Python 3.11 for compatibility
+- Procfile configured for Gunicorn
+- Environment variables required: DATABASE_URL, SECRET_KEY
+- .buildpacks file ensures Python-only buildpack
+- .gitignore excludes development files (*.db, __pycache__)
+
+The application is fully functional and ready for users!
