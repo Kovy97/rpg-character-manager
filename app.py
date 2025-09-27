@@ -7,7 +7,7 @@ import json
 import io
 
 from config import config
-from models import db, User, Character, ChatRoom, ChatMessage, RoomMember, init_db
+from models import db, User, Character, ChatRoom, ChatMessage, RoomMember, SharedCharacter, UserCharacterAccess, init_db
 
 def create_app(config_name=None):
     app = Flask(__name__)
@@ -228,10 +228,22 @@ def api_login():
 @app.route('/api/characters', methods=['GET'])
 @login_required
 def api_get_characters():
-    """Get all characters for current user"""
+    """Get all characters user has access to"""
     try:
-        characters = Character.query.filter_by(user_id=current_user.id).all()
-        return jsonify({'success': True, 'characters': [char.to_dict() for char in characters]})
+        # Get characters through UserCharacterAccess table
+        access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
+        characters = [access.character for access in access_entries if access.character]
+
+        # Add access level info to character data
+        result_characters = []
+        for access in access_entries:
+            if access.character:
+                char_dict = access.character.to_dict()
+                char_dict['access_level'] = access.access_level
+                char_dict['access_id'] = access.id
+                result_characters.append(char_dict)
+
+        return jsonify({'success': True, 'characters': result_characters})
     except Exception as e:
         return jsonify({'success': False, 'message': f'Fehler beim Laden der Charaktere: {str(e)}'}), 500
 
@@ -285,9 +297,24 @@ def api_create_character():
             character.set_effekte(data['effekte'])
 
         db.session.add(character)
+        db.session.flush()  # Get character ID
+
+        # Create access entry for character creator
+        access = UserCharacterAccess(
+            user_id=current_user.id,
+            character_id=character.id,
+            access_level='owner',
+            granted_by=current_user.id
+        )
+        db.session.add(access)
         db.session.commit()
 
-        return jsonify({'success': True, 'character': character.to_dict()})
+        # Add access info to response
+        char_dict = character.to_dict()
+        char_dict['access_level'] = 'owner'
+        char_dict['access_id'] = access.id
+
+        return jsonify({'success': True, 'character': char_dict})
 
     except Exception as e:
         db.session.rollback()
@@ -345,22 +372,33 @@ def api_update_character(character_id):
 
 @app.route('/api/characters/<int:character_id>', methods=['DELETE'])
 @login_required
-def api_delete_character(character_id):
-    """Delete character"""
+def api_remove_character_access(character_id):
+    """Remove user access to character (doesn't delete character permanently)"""
     try:
-        character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
+        # Find user's access to this character
+        access = UserCharacterAccess.query.filter_by(
+            character_id=character_id,
+            user_id=current_user.id
+        ).first()
 
-        if not character:
-            return jsonify({'success': False, 'message': 'Charakter nicht gefunden'}), 404
+        if not access:
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
 
-        db.session.delete(character)
+        # Get character name for message
+        character_name = access.character.name if access.character else 'Unbekannt'
+
+        # Remove access (character stays in database)
+        db.session.delete(access)
         db.session.commit()
 
-        return jsonify({'success': True, 'message': 'Charakter erfolgreich gelöscht'})
+        return jsonify({
+            'success': True,
+            'message': f'Zugriff auf Charakter "{character_name}" entfernt (Charakter bleibt erhalten)'
+        })
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': f'Fehler beim Löschen des Charakters: {str(e)}'}), 500
+        return jsonify({'success': False, 'message': f'Fehler beim Entfernen des Zugriffs: {str(e)}'}), 500
 
 @app.route('/api/user/info')
 @login_required
@@ -730,13 +768,23 @@ def api_share_character(room_id):
         share_message = f"""{current_user.username} teilt Charakter "{character_data['name']}" """
 
         # Create message with character data
+        # Create shared character entry
+        shared_character = SharedCharacter(
+            original_character_id=character['id'] if 'id' in character else None,
+            shared_by=current_user.id,
+            character_data=json.dumps(character_data)
+        )
+        db.session.add(shared_character)
+        db.session.flush()  # Get the ID
+
+        # Create chat message with reference to shared character
+        share_message = f"""{current_user.username} teilt Charakter "{character_data['name']}" (ID: {shared_character.id})"""
+
         message = ChatMessage(
             room_id=room_id,
             user_id=current_user.id,
             message=share_message,
-            message_type='character_share'  # Special type for character sharing
-            # TODO: Re-enable message_data after migration
-            # message_data=json.dumps({'character_data': character_data})
+            message_type='character_share'
         )
         db.session.add(message)
 
@@ -751,14 +799,88 @@ def api_share_character(room_id):
 
         db.session.commit()
 
-        # Return message with character data for frontend
-        message_dict = message.to_dict()
-        message_dict['character_data'] = character_data
+        return jsonify({
+            'success': True,
+            'message': 'Charakter erfolgreich geteilt',
+            'shared_character_id': shared_character.id
+        })
 
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/shared-characters', methods=['GET'])
+@login_required
+def api_get_shared_characters():
+    """Get all active shared characters"""
+    try:
+        shared_characters = SharedCharacter.query.filter_by(is_active=True)\
+                                                .order_by(SharedCharacter.shared_at.desc())\
+                                                .limit(100).all()
 
         return jsonify({
             'success': True,
-            'message': message_dict
+            'shared_characters': [sc.to_dict() for sc in shared_characters]
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/shared-characters/<int:shared_id>/import', methods=['POST'])
+@login_required
+def api_import_shared_character(shared_id):
+    """Import a shared character to user's collection"""
+    try:
+        shared_character = SharedCharacter.query.get(shared_id)
+        if not shared_character or not shared_character.is_active:
+            return jsonify({'success': False, 'message': 'Geteilter Charakter nicht gefunden'}), 404
+
+        character_data = shared_character.get_character_data()
+
+        # Create new character for current user
+        new_character = Character(
+            user_id=current_user.id,
+            name=character_data.get('name', 'Importierter Charakter'),
+            staerke=character_data.get('staerke', 1),
+            geschicklichkeit=character_data.get('geschicklichkeit', 1),
+            wahrnehmung=character_data.get('wahrnehmung', 1),
+            willenskraft=character_data.get('willenskraft', 1),
+            leben_aktuell=character_data.get('leben_aktuell', 10),
+            stress_aktuell=character_data.get('stress_aktuell', 0),
+            zustaende=json.dumps(character_data.get('zustaende', [])),
+            effekte=json.dumps(character_data.get('effekte', []))
+        )
+
+        # Handle image data if present
+        if character_data.get('image_data'):
+            import base64
+            try:
+                new_character.image_data = base64.b64decode(character_data['image_data'])
+            except Exception:
+                pass  # Skip image if decoding fails
+
+        db.session.add(new_character)
+        db.session.flush()  # Get character ID
+
+        # Create access entry for character importer
+        access = UserCharacterAccess(
+            user_id=current_user.id,
+            character_id=new_character.id,
+            access_level='owner',
+            granted_by=current_user.id
+        )
+        db.session.add(access)
+        db.session.commit()
+
+        # Add access info to response
+        char_dict = new_character.to_dict()
+        char_dict['access_level'] = 'owner'
+        char_dict['access_id'] = access.id
+
+        return jsonify({
+            'success': True,
+            'message': f'Charakter "{new_character.name}" erfolgreich importiert',
+            'character': char_dict
         })
 
     except Exception as e:
@@ -803,17 +925,177 @@ def api_import_character():
             character.set_image_from_base64(character_data['image_base64'])
 
         db.session.add(character)
+        db.session.flush()  # Get character ID
+
+        # Create access entry for character importer
+        access = UserCharacterAccess(
+            user_id=current_user.id,
+            character_id=character.id,
+            access_level='owner',
+            granted_by=current_user.id
+        )
+        db.session.add(access)
         db.session.commit()
+
+        # Add access info to response
+        char_dict = character.to_dict()
+        char_dict['access_level'] = 'owner'
+        char_dict['access_id'] = access.id
 
         return jsonify({
             'success': True,
             'message': 'Charakter erfolgreich importiert',
-            'character': character.to_dict()
+            'character': char_dict
         })
 
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Fehler beim Importieren: {str(e)}'}), 500
+
+@app.route('/api/characters/check-name', methods=['POST'])
+@login_required
+def api_check_character_name():
+    """Check if character name already exists for current user"""
+    try:
+        data = request.get_json()
+        name = data.get('name', '').strip()
+
+        if not name:
+            return jsonify({'success': False, 'message': 'Charaktername erforderlich'}), 400
+
+        # Check if user has access to a character with this name
+        access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
+        existing_characters = []
+
+        for access in access_entries:
+            if access.character and access.character.name.lower() == name.lower():
+                existing_characters.append({
+                    'id': access.character.id,
+                    'name': access.character.name,
+                    'access_level': access.access_level
+                })
+
+        return jsonify({
+            'success': True,
+            'exists': len(existing_characters) > 0,
+            'existing_characters': existing_characters
+        })
+
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/characters/save-new', methods=['POST'])
+@login_required
+def api_save_character_new():
+    """Save character as new character (force create new)"""
+    try:
+        data = request.get_json()
+        character_data = data.get('character_data')
+
+        if not character_data:
+            return jsonify({'success': False, 'message': 'Charakterdaten erforderlich'}), 400
+
+        # Force create new character
+        character = Character(
+            user_id=current_user.id,
+            name=character_data.get('name', 'Neuer Charakter'),
+            staerke=character_data.get('staerke', 1),
+            geschicklichkeit=character_data.get('geschicklichkeit', 1),
+            wahrnehmung=character_data.get('wahrnehmung', 1),
+            willenskraft=character_data.get('willenskraft', 1),
+            leben_aktuell=character_data.get('leben_aktuell', 10),
+            stress_aktuell=character_data.get('stress_aktuell', 0),
+            zustaende=json.dumps(character_data.get('zustaende', [])),
+            effekte=json.dumps(character_data.get('effekte', []))
+        )
+
+        # Handle image if provided
+        if character_data.get('image_base64'):
+            character.set_image_from_base64(character_data['image_base64'])
+
+        character.calculate_derived_values()
+
+        db.session.add(character)
+        db.session.flush()
+
+        # Create access entry
+        access = UserCharacterAccess(
+            user_id=current_user.id,
+            character_id=character.id,
+            access_level='owner',
+            granted_by=current_user.id
+        )
+        db.session.add(access)
+        db.session.commit()
+
+        char_dict = character.to_dict()
+        char_dict['access_level'] = 'owner'
+        char_dict['access_id'] = access.id
+
+        return jsonify({
+            'success': True,
+            'message': f'Neuer Charakter "{character.name}" erstellt',
+            'character': char_dict
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/characters/save-overwrite/<int:character_id>', methods=['PUT'])
+@login_required
+def api_save_character_overwrite(character_id):
+    """Overwrite existing character with new data"""
+    try:
+        data = request.get_json()
+        character_data = data.get('character_data')
+
+        if not character_data:
+            return jsonify({'success': False, 'message': 'Charakterdaten erforderlich'}), 400
+
+        # Check if user has access to this character
+        access = UserCharacterAccess.query.filter_by(
+            user_id=current_user.id,
+            character_id=character_id
+        ).first()
+
+        if not access or not access.character:
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
+
+        character = access.character
+
+        # Update character data
+        character.name = character_data.get('name', character.name)
+        character.staerke = character_data.get('staerke', character.staerke)
+        character.geschicklichkeit = character_data.get('geschicklichkeit', character.geschicklichkeit)
+        character.wahrnehmung = character_data.get('wahrnehmung', character.wahrnehmung)
+        character.willenskraft = character_data.get('willenskraft', character.willenskraft)
+        character.leben_aktuell = character_data.get('leben_aktuell', character.leben_aktuell)
+        character.stress_aktuell = character_data.get('stress_aktuell', character.stress_aktuell)
+        character.zustaende = json.dumps(character_data.get('zustaende', []))
+        character.effekte = json.dumps(character_data.get('effekte', []))
+
+        # Handle image if provided
+        if character_data.get('image_base64'):
+            character.set_image_from_base64(character_data['image_base64'])
+
+        character.calculate_derived_values()
+
+        db.session.commit()
+
+        char_dict = character.to_dict()
+        char_dict['access_level'] = access.access_level
+        char_dict['access_id'] = access.id
+
+        return jsonify({
+            'success': True,
+            'message': f'Charakter "{character.name}" überschrieben',
+            'character': char_dict
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
 
 @app.route('/api/chat/rooms/<int:room_id>/members', methods=['GET'])
 @login_required

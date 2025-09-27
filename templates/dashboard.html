@@ -617,7 +617,8 @@
 
                     <div class="actions" style="margin-top: 16px; justify-content: center;">
                         <button class="btn neutral btn-save-json" type="button">💾 Speichern (JSON)</button>
-                        <button class="btn btn-save-server" type="button">☁️ Speichern (Server)</button>
+                        <button class="btn btn-save-new" type="button">☁️ Neu erstellen</button>
+                        <button class="btn btn-save-overwrite" type="button">🔄 Überschreiben</button>
                     </div>
                 </div>
             </div>
@@ -690,8 +691,12 @@
             a.click();
         });
 
-        panel.querySelector('.btn-save-server').addEventListener('click', async () => {
-            await saveCharacterToServer(panel);
+        panel.querySelector('.btn-save-new').addEventListener('click', async () => {
+            await saveCharacterToServer(panel, 'new');
+        });
+
+        panel.querySelector('.btn-save-overwrite').addEventListener('click', async () => {
+            await saveCharacterToServer(panel, 'overwrite');
         });
 
         // Dice rolling
@@ -1016,7 +1021,7 @@
     }
 
     // Server functions
-    async function saveCharacterToServer(panel) {
+    async function saveCharacterToServer(panel, mode) {
         if (!currentUser) {
             alert('Sie müssen eingeloggt sein, um Charaktere zu speichern.');
             return;
@@ -1025,30 +1030,132 @@
         const data = getPanelData(panel);
 
         try {
-            const response = await fetch('/api/characters', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: data.name,
-                    staerke: data.staerke,
-                    geschicklichkeit: data.geschicklichkeit,
-                    wahrnehmung: data.wahrnehmung,
-                    willenskraft: data.willenskraft,
-                    zustaende: data.zustaende,
-                    image_base64: data.imageData
-                })
-            });
-
-            if (response.ok) {
-                alert('Charakter erfolgreich gespeichert!');
-                location.reload();
-            } else {
-                const error = await response.json();
-                alert(`Fehler beim Speichern: ${error.message}`);
+            if (mode === 'new') {
+                // Force create new character
+                await saveCharacterNew(data);
+            } else if (mode === 'overwrite') {
+                // Check if character with this name exists and ask which one to overwrite
+                await saveCharacterOverwrite(data);
             }
         } catch (err) {
             alert('Netzwerkfehler beim Speichern des Charakters.');
             console.error(err);
+        }
+    }
+
+    async function saveCharacterNew(data) {
+        try {
+            const response = await fetch('/api/characters/save-new', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    character_data: {
+                        name: data.name,
+                        staerke: data.staerke,
+                        geschicklichkeit: data.geschicklichkeit,
+                        wahrnehmung: data.wahrnehmung,
+                        willenskraft: data.willenskraft,
+                        leben_aktuell: data.leben_aktuell,
+                        stress_aktuell: data.stress_aktuell,
+                        zustaende: data.zustaende,
+                        effekte: data.effekte,
+                        image_base64: data.imageData
+                    }
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert(`✅ ${result.message}`);
+                location.reload();
+            } else {
+                alert(`❌ Fehler: ${result.message}`);
+            }
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    async function saveCharacterOverwrite(data) {
+        try {
+            // First check if character name exists
+            const checkResponse = await fetch('/api/characters/check-name', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: data.name })
+            });
+
+            const checkResult = await checkResponse.json();
+            if (!checkResult.success) {
+                alert(`❌ Fehler: ${checkResult.message}`);
+                return;
+            }
+
+            if (!checkResult.exists) {
+                alert('❌ Kein Charakter mit diesem Namen gefunden zum Überschreiben.');
+                return;
+            }
+
+            // If multiple characters with same name, let user choose
+            if (checkResult.existing_characters.length > 1) {
+                const characterList = checkResult.existing_characters.map((char, index) =>
+                    `${index + 1}. ${char.name} (${char.access_level})`
+                ).join('\n');
+
+                const choice = prompt(
+                    `Mehrere Charaktere mit Namen "${data.name}" gefunden:\n\n${characterList}\n\nWelchen möchten Sie überschreiben? (Nummer eingeben)`
+                );
+
+                const choiceIndex = parseInt(choice) - 1;
+                if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= checkResult.existing_characters.length) {
+                    alert('❌ Ungültige Auswahl.');
+                    return;
+                }
+
+                const selectedCharacter = checkResult.existing_characters[choiceIndex];
+                await performOverwrite(selectedCharacter.id, data);
+            } else {
+                // Single character found
+                const character = checkResult.existing_characters[0];
+                if (confirm(`Charakter "${character.name}" überschreiben?`)) {
+                    await performOverwrite(character.id, data);
+                }
+            }
+        } catch (err) {
+            throw err;
+        }
+    }
+
+    async function performOverwrite(characterId, data) {
+        try {
+            const response = await fetch(`/api/characters/save-overwrite/${characterId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    character_data: {
+                        name: data.name,
+                        staerke: data.staerke,
+                        geschicklichkeit: data.geschicklichkeit,
+                        wahrnehmung: data.wahrnehmung,
+                        willenskraft: data.willenskraft,
+                        leben_aktuell: data.leben_aktuell,
+                        stress_aktuell: data.stress_aktuell,
+                        zustaende: data.zustaende,
+                        effekte: data.effekte,
+                        image_base64: data.imageData
+                    }
+                })
+            });
+
+            const result = await response.json();
+            if (result.success) {
+                alert(`✅ ${result.message}`);
+                location.reload();
+            } else {
+                alert(`❌ Fehler: ${result.message}`);
+            }
+        } catch (err) {
+            throw err;
         }
     }
 
@@ -1162,6 +1269,31 @@
             this.initEventListeners();
             this.loadUserRooms();
             this.loadChatSettings();
+        }
+
+        async importSharedCharacter(sharedId) {
+            try {
+                const response = await fetch(`/api/shared-characters/${sharedId}/import`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(`✅ ${result.message}`);
+                    // Refresh character list in sidebar
+                    if (typeof loadUserCharacters === 'function') {
+                        loadUserCharacters();
+                    }
+                } else {
+                    alert(`❌ Fehler beim Importieren: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('Error importing shared character:', error);
+                alert('❌ Fehler beim Importieren des geteilten Charakters');
+            }
         }
 
         initEventListeners() {
@@ -1577,19 +1709,21 @@
         }
 
         formatCharacterShareMessage(text, characterData) {
-            if (!characterData) {
+            // Extract shared character ID from message text
+            const idMatch = text.match(/\(ID:\s*(\d+)\)/);
+            const sharedId = idMatch ? idMatch[1] : null;
+
+            if (!sharedId) {
                 return `<div class="character-share-content">${this.escapeHtml(text)}</div>`;
             }
-
-            const characterDataStr = JSON.stringify(characterData).replace(/'/g, '&apos;');
 
             return `
                 <div class="character-share-content">
                     <div class="character-preview">
                         <div class="character-info">
-                            <strong>${this.escapeHtml(characterData.name)}</strong>
+                            ${this.escapeHtml(text.replace(/\s*\(ID:\s*\d+\)/, ''))}
                         </div>
-                        <button class="btn btn-import" onclick="chatManager.importCharacter('${characterDataStr}')">
+                        <button class="btn btn-import" onclick="chatManager.importSharedCharacter(${sharedId})">
                             📥 IMPORT
                         </button>
                     </div>

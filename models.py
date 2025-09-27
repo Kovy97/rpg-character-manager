@@ -339,3 +339,84 @@ class RoomMember(db.Model):
 
     def __repr__(self):
         return f'<RoomMember User {self.user_id} in Room {self.room_id}>'
+
+
+class SharedCharacter(db.Model):
+    """Global character sharing table - characters shared across all players"""
+    __tablename__ = 'shared_characters'
+
+    id = db.Column(db.Integer, primary_key=True)
+    original_character_id = db.Column(db.Integer, db.ForeignKey('characters.id'), nullable=False)
+    shared_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    shared_at = db.Column(db.DateTime, default=datetime.utcnow)
+    is_active = db.Column(db.Boolean, default=True)
+
+    # Store current character data as JSON for dynamic updates
+    character_data = db.Column(db.Text, nullable=False)  # JSON of full character
+
+    # Relationships
+    original_character = db.relationship('Character', backref='shared_versions')
+    sharer = db.relationship('User', backref='shared_characters')
+
+    def get_character_data(self):
+        """Parse character data JSON"""
+        try:
+            import json
+            return json.loads(self.character_data)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def update_character_data(self, character_data_dict):
+        """Update character data from dict"""
+        import json
+        self.character_data = json.dumps(character_data_dict)
+
+    def to_dict(self):
+        character_data = self.get_character_data()
+        return {
+            'id': self.id,
+            'original_character_id': self.original_character_id,
+            'shared_by': self.shared_by,
+            'sharer_name': self.sharer.username if self.sharer else 'Unknown',
+            'shared_at': self.shared_at.isoformat() if self.shared_at else None,
+            'is_active': self.is_active,
+            'character_data': character_data
+        }
+
+    def __repr__(self):
+        return f'<SharedCharacter {self.id} from Character {self.original_character_id}>'
+
+
+class UserCharacterAccess(db.Model):
+    """User access to characters - allows multiple users to manage same character"""
+    __tablename__ = 'user_character_access'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    character_id = db.Column(db.Integer, db.ForeignKey('characters.id'), nullable=False)
+    access_level = db.Column(db.String(20), default='owner')  # owner, editor, viewer
+    granted_at = db.Column(db.DateTime, default=datetime.utcnow)
+    granted_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)  # Who granted access
+
+    # Unique constraint to prevent duplicate access entries
+    __table_args__ = (db.UniqueConstraint('user_id', 'character_id', name='unique_user_character_access'),)
+
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='character_access')
+    character = db.relationship('Character', backref='user_access')
+    granter = db.relationship('User', foreign_keys=[granted_by])
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'character_id': self.character_id,
+            'access_level': self.access_level,
+            'username': self.user.username if self.user else 'Unknown',
+            'character_name': self.character.name if self.character else 'Unknown',
+            'granted_at': self.granted_at.isoformat() if self.granted_at else None,
+            'granted_by': self.granter.username if self.granter else 'System'
+        }
+
+    def __repr__(self):
+        return f'<UserCharacterAccess User {self.user_id} -> Character {self.character_id} ({self.access_level})>'
