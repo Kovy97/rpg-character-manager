@@ -234,21 +234,28 @@ def api_get_characters():
     try:
         result_characters = []
 
-        # Method 1: Get characters from new access system
+        # Method 1: Get characters from new access system (exclude deleted)
         access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
+        deleted_character_ids = set()
+
         for access in access_entries:
             if access.character:
-                char_dict = access.character.to_dict()
-                char_dict['access_level'] = access.access_level
-                char_dict['access_id'] = access.id
-                result_characters.append(char_dict)
+                if access.access_level == 'deleted':
+                    # Track deleted characters to exclude from old system
+                    deleted_character_ids.add(access.character_id)
+                else:
+                    # Add non-deleted characters
+                    char_dict = access.character.to_dict()
+                    char_dict['access_level'] = access.access_level
+                    char_dict['access_id'] = access.id
+                    result_characters.append(char_dict)
 
-        # Method 2: Get characters from old system (user_id link)
+        # Method 2: Get characters from old system (user_id link) - exclude deleted
         existing_ids = {char['id'] for char in result_characters}
         old_characters = Character.query.filter_by(user_id=current_user.id).all()
 
         for char in old_characters:
-            if char.id not in existing_ids:
+            if char.id not in existing_ids and char.id not in deleted_character_ids:
                 char_dict = char.to_dict()
                 char_dict['access_level'] = 'owner'
                 char_dict['access_id'] = None
@@ -395,20 +402,18 @@ def api_remove_character_access(character_id):
             db.session.delete(access)
             deleted = True
 
-        # Method 2: Check old system and create access entry to be deleted
+        # Method 2: Check old system and mark as deleted
         character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
         if character and not access:  # Only if not already found in new system
             character_name = character.name
-            # Create access entry and then delete it (migrates to new system)
+            # Create permanent 'deleted' marker to prevent re-appearance
             access = UserCharacterAccess(
                 user_id=current_user.id,
                 character_id=character.id,
-                access_level='owner',
+                access_level='deleted',  # Permanent deletion marker
                 granted_by=current_user.id
             )
             db.session.add(access)
-            db.session.flush()
-            db.session.delete(access)
             deleted = True
 
         if not deleted:
