@@ -1398,7 +1398,7 @@
             let result = this.escapeHtml(text);
 
             // Nur ASCII Anführungszeichen: "text"
-            result = result.replace(/"([^"]*)"/g,
+               result = result.replace(/"([^"]*)"/g,
                 '<span class="quote-text">$&</span>');
 
             return result;

@@ -12,9 +12,16 @@ from models import db, User, Character, ChatRoom, ChatMessage, RoomMember, init_
 def create_app(config_name=None):
     app = Flask(__name__)
 
-    # Configuration
-    config_name = config_name or os.environ.get('FLASK_ENV', 'development')
+    # Configuration - Auto-detect environment
+    if config_name is None:
+        # DigitalOcean sets DATABASE_URL, use that as production indicator
+        if os.environ.get('DATABASE_URL') or os.environ.get('PORT'):
+            config_name = 'production'
+        else:
+            config_name = os.environ.get('FLASK_ENV', 'development')
+
     app.config.from_object(config[config_name])
+    config[config_name].init_app(app)
 
     # Initialize extensions
     db.init_app(app)
@@ -731,4 +738,5 @@ def internal_error(error):
     return render_template('500.html'), 500
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=4000)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)

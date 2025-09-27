@@ -12,7 +12,7 @@ class Config:
     if DATABASE_URL and DATABASE_URL.startswith('postgres://'):
         DATABASE_URL = DATABASE_URL.replace('postgres://', 'postgresql://', 1)
 
-    SQLALCHEMY_DATABASE_URI = 'sqlite:///app.db'
+    SQLALCHEMY_DATABASE_URI = DATABASE_URL or 'sqlite:///app.db'
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # File upload configuration
@@ -35,6 +35,14 @@ class DevelopmentConfig(Config):
 
 class ProductionConfig(Config):
     DEBUG = False
+
+    @classmethod
+    def init_app(cls, app):
+        Config.init_app(app)
+
+        # Ensure production database is used
+        if os.environ.get('DATABASE_URL'):
+            app.config['SQLALCHEMY_DATABASE_URI'] = cls.DATABASE_URL
 
 config = {
     'development': DevelopmentConfig,

@@ -10,7 +10,7 @@ This is a German-language RPG Character Manager web application built with Flask
 
 ### Running the Application
 ```bash
-# Development server (with debug mode) - runs on localhost:4000
+# Development server (with debug mode) - runs on localhost:5000
 python app.py
 
 # Production with Gunicorn
@@ -21,6 +21,9 @@ gunicorn wsgi:app
 ```bash
 # Initialize database (automatic on first run)
 python -c "from app import create_app; app = create_app(); app.app_context().push(); from app import db; db.create_all()"
+
+# Alternative: Use the dedicated initialization script (recommended for deployment)
+python init_db.py
 
 # Access database shell
 python -c "from app import create_app; app = create_app(); app.app_context().push(); from app import db; from models import User, Character"
