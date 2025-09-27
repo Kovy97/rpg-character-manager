@@ -865,13 +865,18 @@
     }
 
     function sendDiceRollToChat(panel, attribute, rollValue, modifier, total) {
-        // Check if user is in a chat room
-        const activeRoom = localStorage.getItem('activeRoom');
-        if (!activeRoom) return;
+        // Check if user is in a chat room (using chatManager)
+        if (!window.chatManager || !chatManager.activeRoom) {
+            return; // No active chat room
+        }
+
+        const activeRoom = chatManager.activeRoom;
 
         // Get character name from panel
         const characterName = panel.querySelector('.name').value.trim();
-        if (!characterName) return;
+        if (!characterName) {
+            return; // No character name
+        }
 
         // Map German attribute names to short codes for display
         const attrDisplayMapping = {
@@ -898,11 +903,13 @@
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                console.log('Dice roll sent to chat');
-                // Refresh chat messages if chat panel is visible
-                if (typeof refreshChatMessages === 'function') {
-                    refreshChatMessages();
+                console.log('✅ Dice roll sent to chat room:', activeRoom);
+                // Refresh chat messages to show the dice roll immediately
+                if (chatManager && chatManager.loadRoomMessages) {
+                    chatManager.loadRoomMessages(activeRoom);
                 }
+            } else {
+                console.warn('Failed to send dice roll:', data.message);
             }
         })
         .catch(error => {
@@ -1048,9 +1055,45 @@
     function shareCharacterToChat(tabId) {
         const panel = document.querySelector(`.panel[data-id="${tabId}"]`);
         if (!panel) return;
+
+        // Check if user is in a chat room
+        if (!window.chatManager || !chatManager.activeRoom) {
+            alert('Bitte wähle zuerst einen Chat-Raum aus!');
+            return;
+        }
+
         const data = getPanelData(panel);
-        console.log('Sharing character to chat:', data);
-        alert('Chat-Funktion noch nicht implementiert');
+        if (!data.name.trim()) {
+            alert('Charakter muss einen Namen haben!');
+            return;
+        }
+
+        // Send character to chat room
+        fetch(`/api/chat/rooms/${chatManager.activeRoom}/share-character`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                character_data: data
+            })
+        })
+        .then(response => response.json())
+        .then(result => {
+            if (result.success) {
+                console.log('✅ Character shared to chat');
+                // Refresh chat messages to show the shared character
+                if (chatManager && chatManager.loadRoomMessages) {
+                    chatManager.loadRoomMessages(chatManager.activeRoom);
+                }
+            } else {
+                alert(`Fehler beim Teilen: ${result.message}`);
+            }
+        })
+        .catch(error => {
+            console.error('Error sharing character:', error);
+            alert('Fehler beim Teilen des Charakters');
+        });
     }
 
     // Character management from sidebar
@@ -1396,12 +1439,23 @@
                 const isOwn = msg.user_id === {{ current_user.id if current_user.is_authenticated else 'null' }};
                 const timestamp = new Date(msg.timestamp).toLocaleTimeString('de-DE', {hour: '2-digit', minute: '2-digit'});
 
-                // Use the unified formatMessageText function
-                let messageText = this.formatMessageText(msg.message);
+                let messageText;
+                let messageClasses = isOwn ? 'own' : '';
 
+                // Special handling for special message types
+                if (msg.message_type === 'dice') {
+                    messageClasses += ' dice';
+                    messageText = this.formatDiceMessage(msg.message);
+                } else if (msg.message_type === 'character_share') {
+                    messageClasses += ' character-share';
+                    messageText = this.formatCharacterShareMessage(msg.message, msg.character_data);
+                } else {
+                    // Use the unified formatMessageText function for regular messages
+                    messageText = this.formatMessageText(msg.message);
+                }
 
                 html += `
-                    <div class="message ${isOwn ? 'own' : ''}" data-message-id="${msg.id}">
+                    <div class="message ${messageClasses}" data-message-id="${msg.id}">
                         <div class="message-header">
                             <span>${msg.username}</span>
                             <span>${timestamp}</span>
@@ -1457,6 +1511,72 @@
             const div = document.createElement('div');
             div.textContent = text;
             return div.innerHTML;
+        }
+
+        formatDiceMessage(text) {
+            // Expected format: "Mortimer:\nWürfelt für "Mortimer Derrington" STR: W20=15+3=18 → Erfolg"
+            const lines = text.split('\n');
+            if (lines.length < 2) return this.escapeHtml(text);
+
+            const username = this.escapeHtml(lines[0]);
+            const diceText = lines[1];
+
+            // Parse dice roll: Würfelt für "Character" ATTR: W20=roll+mod=total → Result
+            const diceMatch = diceText.match(/Würfelt für "([^"]+)" (STR|GES|WAH|WIL): W20=(\d+)\+(\d+)=(\d+) → (.+)/);
+
+            if (!diceMatch) {
+                return `<div class="dice-roll-content">${this.escapeHtml(text)}</div>`;
+            }
+
+            const [, characterName, attribute, rollValue, modifier, total, result] = diceMatch;
+
+            // Determine attribute class and result type
+            const attrClass = attribute.toLowerCase();
+            let resultClass = 'normal ' + attrClass;
+
+            if (result.includes('Kritischer Erfolg')) {
+                resultClass = 'critical-success';
+            } else if (result.includes('Kritischer Fehler')) {
+                resultClass = 'critical-fail';
+            }
+
+            return `
+                <div class="dice-roll-content">
+                    <div class="dice-character-name">${this.escapeHtml(username)}</div>
+                    <div>Würfelt für "<span class="dice-character-name">${this.escapeHtml(characterName)}</span>"
+                    <span class="dice-attribute ${attrClass}">${attribute}</span>:
+                    W20=${rollValue}+${modifier}=<span class="dice-result ${resultClass}">${total}</span> →
+                    <span class="dice-result ${resultClass}">${this.escapeHtml(result)}</span></div>
+                </div>
+            `;
+        }
+
+        formatCharacterShareMessage(text, characterData) {
+            if (!characterData) {
+                return `<div class="character-share-content">${this.escapeHtml(text)}</div>`;
+            }
+
+            const characterDataStr = JSON.stringify(characterData).replace(/'/g, '&apos;');
+
+            return `
+                <div class="character-share-content">
+                    <div class="share-message">${this.escapeHtml(text)}</div>
+                    <div class="character-preview">
+                        <div class="character-info">
+                            <strong>${this.escapeHtml(characterData.name)}</strong>
+                            <div class="attributes-preview">
+                                <span class="attr-preview str">STR: ${characterData.staerke}</span>
+                                <span class="attr-preview ges">GES: ${characterData.geschicklichkeit}</span>
+                                <span class="attr-preview wah">WAH: ${characterData.wahrnehmung}</span>
+                                <span class="attr-preview wil">WIL: ${characterData.willenskraft}</span>
+                            </div>
+                        </div>
+                        <button class="btn btn-import" onclick="chatManager.importCharacter('${characterDataStr}')">
+                            📥 IMPORT
+                        </button>
+                    </div>
+                </div>
+            `;
         }
 
         async sendMessage() {
@@ -1627,7 +1747,8 @@
                 if (response.ok) {
                     // Success - close modal and reload
                     closeModal('editMessageModal');
-                    $('#editMessageForm')[0].reset();
+                    const form = document.getElementById('editMessageForm');
+                    if (form && form.reset) form.reset();
                     await this.loadRoomMessages(this.activeRoom);
                 } else {
                     // Server error
@@ -1637,7 +1758,8 @@
             } catch (err) {
                 // Network error - but edit might have worked
                 closeModal('editMessageModal');
-                $('#editMessageForm')[0].reset();
+                const form = document.getElementById('editMessageForm');
+                if (form && form.reset) form.reset();
                 await this.loadRoomMessages(this.activeRoom);
             }
         }
@@ -1838,6 +1960,36 @@
             const shareText = `[Charakter: ${data.name}] STR:${data.staerke} GES:${data.geschicklichkeit} WAH:${data.wahrnehmung} WIL:${data.willenskraft}`;
 
             $('#chatInput').value = shareText;
+        }
+
+        async importCharacter(characterDataStr) {
+            try {
+                const characterData = JSON.parse(characterDataStr.replace(/&apos;/g, "'"));
+
+                const response = await fetch('/api/characters/import', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        character_data: characterData
+                    })
+                });
+
+                const result = await response.json();
+                if (result.success) {
+                    alert(`✅ Charakter "${characterData.name}" erfolgreich importiert!`);
+                    // Refresh character list in sidebar
+                    if (typeof loadUserCharacters === 'function') {
+                        loadUserCharacters();
+                    }
+                } else {
+                    alert(`❌ Fehler beim Importieren: ${result.message}`);
+                }
+            } catch (error) {
+                console.error('Error importing character:', error);
+                alert('❌ Fehler beim Importieren des Charakters');
+            }
         }
 
         startPolling() {

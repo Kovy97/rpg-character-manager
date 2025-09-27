@@ -679,6 +679,113 @@ Würfelt für "{character_name}" {attribute}: W20={roll_value}+{modifier}={total
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
 
+@app.route('/api/chat/rooms/<int:room_id>/share-character', methods=['POST'])
+@login_required
+def api_share_character(room_id):
+    """Share character to chat room"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if user is member (for private rooms) or if room is public
+        if not room.is_public and not room.is_member(current_user.id):
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Raum'}), 403
+
+        data = request.get_json()
+        character_data = data.get('character_data')
+
+        if not character_data:
+            return jsonify({'success': False, 'message': 'Charakterdaten erforderlich'}), 400
+
+        # Create character share message
+        share_message = f"""{current_user.username} teilt Charakter "{character_data['name']}" """
+
+        # Create message with character data
+        message = ChatMessage(
+            room_id=room_id,
+            user_id=current_user.id,
+            message=share_message,
+            message_type='character_share'  # Special type for character sharing
+        )
+        db.session.add(message)
+
+        # Clean up old messages if more than 200
+        message_count = ChatMessage.query.filter_by(room_id=room_id).count()
+        if message_count > 200:
+            old_messages = ChatMessage.query.filter_by(room_id=room_id)\
+                                         .order_by(ChatMessage.timestamp.asc())\
+                                         .limit(message_count - 200).all()
+            for old_msg in old_messages:
+                db.session.delete(old_msg)
+
+        db.session.commit()
+
+        # Return message with character data for frontend
+        message_dict = message.to_dict()
+        message_dict.update({
+            'character_data': character_data
+        })
+
+        return jsonify({
+            'success': True,
+            'message': message_dict
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
+@app.route('/api/characters/import', methods=['POST'])
+@login_required
+def api_import_character():
+    """Import shared character to user's character list"""
+    try:
+        data = request.get_json()
+        character_data = data.get('character_data')
+
+        if not character_data:
+            return jsonify({'success': False, 'message': 'Charakterdaten erforderlich'}), 400
+
+        # Create new character for the current user
+        character = Character(
+            user_id=current_user.id,
+            name=character_data['name'] + ' (Import)',  # Add (Import) to distinguish
+            staerke=character_data.get('staerke', 1),
+            geschicklichkeit=character_data.get('geschicklichkeit', 1),
+            wahrnehmung=character_data.get('wahrnehmung', 1),
+            willenskraft=character_data.get('willenskraft', 1),
+            aktuelles_leben=character_data.get('aktuelles_leben', 20),
+            aktueller_stress=character_data.get('aktueller_stress', 0)
+        )
+
+        # Set states and effects if provided
+        if 'zustaende' in character_data:
+            character.set_zustaende(character_data['zustaende'])
+
+        if 'effekte' in character_data:
+            character.set_effekte(character_data['effekte'])
+
+        # Calculate derived values
+        character.calculate_derived_values()
+
+        # Handle image if provided
+        if character_data.get('image_base64'):
+            character.set_image_from_base64(character_data['image_base64'])
+
+        db.session.add(character)
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': 'Charakter erfolgreich importiert',
+            'character': character.to_dict()
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler beim Importieren: {str(e)}'}), 500
+
 @app.route('/api/chat/rooms/<int:room_id>/members', methods=['GET'])
 @login_required
 def api_get_members(room_id):
