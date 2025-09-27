@@ -1337,13 +1337,23 @@
         async loadUserRooms() {
             try {
                 const response = await fetch('/api/chat/rooms');
-                if (response.ok) {
+                if (response.status === 500) {
+                    console.error('Server error loading rooms - Chat tables may not be initialized');
+                    // Show fallback UI or alert user
+                    alert('Chat-System momentan nicht verfügbar. Bitte später versuchen.');
+                    return;
+                } else if (response.ok) {
                     const data = await response.json();
-                    this.rooms = data.rooms;
+                    this.rooms = data.rooms || [];
                     this.renderRoomTabs();
+                } else {
+                    console.error('HTTP error loading rooms:', response.status, response.statusText);
                 }
             } catch (err) {
                 console.error('Error loading rooms:', err);
+                // Graceful fallback - initialize empty rooms
+                this.rooms = [];
+                this.renderRoomTabs();
             }
         }
 
@@ -1370,12 +1380,20 @@
             if (this.activeRoom === roomId) return;
 
             const room = this.rooms.find(r => r.id === roomId);
-            if (!room) return;
+            if (!room) {
+                console.error('Room not found:', roomId);
+                return;
+            }
 
             // Try to load messages first to check access
             try {
                 const response = await fetch(`/api/chat/rooms/${roomId}/messages`);
-                if (response.status === 403) {
+
+                if (response.status === 500) {
+                    console.error('Server error when accessing room:', roomId);
+                    alert('Server-Fehler beim Zugriff auf den Raum. Chat-Tabellen möglicherweise nicht initialisiert.');
+                    return;
+                } else if (response.status === 403) {
                     // User is not a member - show password prompt if room has password
                     if (room.has_password) {
                         this.showPasswordModal(roomId);
@@ -1386,7 +1404,8 @@
                         return;
                     }
                 } else if (!response.ok) {
-                    alert('Fehler beim Zugriff auf den Raum');
+                    console.error('HTTP error:', response.status, response.statusText);
+                    alert(`Fehler beim Zugriff auf den Raum: ${response.status}`);
                     return;
                 }
 

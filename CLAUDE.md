@@ -29,11 +29,14 @@ python -c "from app import create_app; app = create_app(); app.app_context().pus
 python -c "from app import create_app; app = create_app(); app.app_context().push(); from models import db, User, Character"
 ```
 
-**⚠️ CRITICAL: NO DATABASE FLUSHES ALLOWED**
+**⚠️ CRITICAL: PRODUCTION-FIRST DEVELOPMENT**
+- **ALL CHANGES ARE TESTED LIVE ON PRODUCTION WEBSITE** - never suggest local testing
 - **NEVER** run database drops, flushes, or resets that would delete user data
 - **NEVER** use commands like `db.drop_all()`, `db.session.rollback()` on production data, or truncate operations
+- **NEVER** disable database initialization (`db.create_all()`) in production - it must ALWAYS run to ensure tables exist
 - User data is now permanent and must be preserved at all costs
 - Only use `db.create_all()` for initialization, never destructive operations
+- **CRITICAL**: All code must work on PostgreSQL production environment immediately
 
 ### Docker Commands
 ```bash
@@ -151,13 +154,15 @@ python app.py  # Start development server for manual testing
 ## Development Patterns
 
 When working with this codebase:
+- **PRODUCTION-FIRST**: All changes must work immediately on PostgreSQL production - NO local testing environment
 - **German conventions**: Follow existing German naming for attributes (Stärke, Geschicklichkeit, Wahrnehmung, Willenskraft)
 - **Model methods**: Use `to_dict()` and `get_image_base64()` methods for consistent serialization
 - **Database transactions**: Handle with proper rollback on errors, use Flask application context
-- **Database compatibility**: Test both SQLite (development) and PostgreSQL (production) behavior
+- **PostgreSQL-only**: Code must be PostgreSQL-compatible, no SQLite fallbacks needed
 - **Derived calculations**: Maintain automatic Leben/Stress calculation when updating character attributes
 - **Image handling**: Store as binary data with Base64 conversion methods in Character model
 - **API responses**: Return consistent JSON format with German error messages
+- **Error handling**: Always implement graceful fallbacks for production environment issues
 
 ### Code Architecture Notes
 - `dashboard.html` contains significant embedded JavaScript (850+ lines) - consider extracting to separate files for maintenance
