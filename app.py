@@ -340,7 +340,7 @@ def api_update_character(character_id):
             if attr in data:
                 setattr(character, attr, max(1, int(data[attr])))
 
-        for attr in ['aktuelles_leben', 'aktueller_stress']:
+        for attr in ['', '']:
             if attr in data:
                 setattr(character, attr, max(0, int(data[attr])))
 
@@ -770,7 +770,7 @@ def api_share_character(room_id):
         # Create message with character data
         # Create shared character entry
         shared_character = SharedCharacter(
-            original_character_id=character['id'] if 'id' in character else None,
+            original_character_id=character_data.get('id', None),
             shared_by=current_user.id,
             character_data=json.dumps(character_data)
         )
@@ -845,11 +845,10 @@ def api_import_shared_character(shared_id):
             geschicklichkeit=character_data.get('geschicklichkeit', 1),
             wahrnehmung=character_data.get('wahrnehmung', 1),
             willenskraft=character_data.get('willenskraft', 1),
-            leben_aktuell=character_data.get('leben_aktuell', 10),
-            stress_aktuell=character_data.get('stress_aktuell', 0),
+            =character_data.get('', 10),
+            =character_data.get('', 0),
             zustaende=json.dumps(character_data.get('zustaende', [])),
-            effekte=json.dumps(character_data.get('effekte', []))
-        )
+                    )
 
         # Handle image data if present
         if character_data.get('image_data'):
@@ -906,8 +905,8 @@ def api_import_character():
             geschicklichkeit=character_data.get('geschicklichkeit', 1),
             wahrnehmung=character_data.get('wahrnehmung', 1),
             willenskraft=character_data.get('willenskraft', 1),
-            aktuelles_leben=character_data.get('aktuelles_leben', 20),
-            aktueller_stress=character_data.get('aktueller_stress', 0)
+            =character_data.get('', 20),
+            =character_data.get('', 0)
         )
 
         # Set states and effects if provided
@@ -1003,11 +1002,10 @@ def api_save_character_new():
             geschicklichkeit=character_data.get('geschicklichkeit', 1),
             wahrnehmung=character_data.get('wahrnehmung', 1),
             willenskraft=character_data.get('willenskraft', 1),
-            leben_aktuell=character_data.get('leben_aktuell', 10),
-            stress_aktuell=character_data.get('stress_aktuell', 0),
+            =character_data.get('', 10),
+            =character_data.get('', 0),
             zustaende=json.dumps(character_data.get('zustaende', [])),
-            effekte=json.dumps(character_data.get('effekte', []))
-        )
+                    )
 
         # Handle image if provided
         if character_data.get('image_base64'):
@@ -1070,8 +1068,8 @@ def api_save_character_overwrite(character_id):
         character.geschicklichkeit = character_data.get('geschicklichkeit', character.geschicklichkeit)
         character.wahrnehmung = character_data.get('wahrnehmung', character.wahrnehmung)
         character.willenskraft = character_data.get('willenskraft', character.willenskraft)
-        character.leben_aktuell = character_data.get('leben_aktuell', character.leben_aktuell)
-        character.stress_aktuell = character_data.get('stress_aktuell', character.stress_aktuell)
+        character. = character_data.get('', character.)
+        character. = character_data.get('', character.)
         character.zustaende = json.dumps(character_data.get('zustaende', []))
         character.effekte = json.dumps(character_data.get('effekte', []))
 

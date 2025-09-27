@@ -696,7 +696,12 @@
         });
 
         panel.querySelector('.btn-save-overwrite').addEventListener('click', async () => {
-            await saveCharacterToServer(panel, 'overwrite');
+            const characterId = panel.dataset.characterId;
+            if (!characterId) {
+                alert('❌ Kein geladener Charakter zum Überschreiben. Bitte zuerst einen Charakter laden oder "Neu erstellen" verwenden.');
+                return;
+            }
+            await saveCharacterToServer(panel, 'overwrite', characterId);
         });
 
         // Dice rolling
@@ -1021,7 +1026,7 @@
     }
 
     // Server functions
-    async function saveCharacterToServer(panel, mode) {
+    async function saveCharacterToServer(panel, mode, characterId = null) {
         if (!currentUser) {
             alert('Sie müssen eingeloggt sein, um Charaktere zu speichern.');
             return;
@@ -1033,9 +1038,9 @@
             if (mode === 'new') {
                 // Force create new character
                 await saveCharacterNew(data);
-            } else if (mode === 'overwrite') {
-                // Check if character with this name exists and ask which one to overwrite
-                await saveCharacterOverwrite(data);
+            } else if (mode === 'overwrite' && characterId) {
+                // Overwrite specific character by ID
+                await saveCharacterOverwrite(characterId, data);
             }
         } catch (err) {
             alert('Netzwerkfehler beim Speichern des Charakters.');
@@ -1055,11 +1060,8 @@
                         geschicklichkeit: data.geschicklichkeit,
                         wahrnehmung: data.wahrnehmung,
                         willenskraft: data.willenskraft,
-                        leben_aktuell: data.leben_aktuell,
-                        stress_aktuell: data.stress_aktuell,
-                        zustaende: data.zustaende,
-                        effekte: data.effekte,
-                        image_base64: data.imageData
+                                                zustaende: data.zustaende,
+                                                image_base64: data.imageData
                     }
                 })
             });
@@ -1076,50 +1078,10 @@
         }
     }
 
-    async function saveCharacterOverwrite(data) {
+    async function saveCharacterOverwrite(characterId, data) {
         try {
-            // First check if character name exists
-            const checkResponse = await fetch('/api/characters/check-name', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: data.name })
-            });
-
-            const checkResult = await checkResponse.json();
-            if (!checkResult.success) {
-                alert(`❌ Fehler: ${checkResult.message}`);
-                return;
-            }
-
-            if (!checkResult.exists) {
-                alert('❌ Kein Charakter mit diesem Namen gefunden zum Überschreiben.');
-                return;
-            }
-
-            // If multiple characters with same name, let user choose
-            if (checkResult.existing_characters.length > 1) {
-                const characterList = checkResult.existing_characters.map((char, index) =>
-                    `${index + 1}. ${char.name} (${char.access_level})`
-                ).join('\n');
-
-                const choice = prompt(
-                    `Mehrere Charaktere mit Namen "${data.name}" gefunden:\n\n${characterList}\n\nWelchen möchten Sie überschreiben? (Nummer eingeben)`
-                );
-
-                const choiceIndex = parseInt(choice) - 1;
-                if (isNaN(choiceIndex) || choiceIndex < 0 || choiceIndex >= checkResult.existing_characters.length) {
-                    alert('❌ Ungültige Auswahl.');
-                    return;
-                }
-
-                const selectedCharacter = checkResult.existing_characters[choiceIndex];
-                await performOverwrite(selectedCharacter.id, data);
-            } else {
-                // Single character found
-                const character = checkResult.existing_characters[0];
-                if (confirm(`Charakter "${character.name}" überschreiben?`)) {
-                    await performOverwrite(character.id, data);
-                }
+            if (confirm(`Charakter "${data.name}" überschreiben?`)) {
+                await performOverwrite(characterId, data);
             }
         } catch (err) {
             throw err;
@@ -1138,11 +1100,8 @@
                         geschicklichkeit: data.geschicklichkeit,
                         wahrnehmung: data.wahrnehmung,
                         willenskraft: data.willenskraft,
-                        leben_aktuell: data.leben_aktuell,
-                        stress_aktuell: data.stress_aktuell,
-                        zustaende: data.zustaende,
-                        effekte: data.effekte,
-                        image_base64: data.imageData
+                                                zustaende: data.zustaende,
+                                                image_base64: data.imageData
                     }
                 })
             });
@@ -1216,6 +1175,10 @@
 
                     const tabId = createCharacterTab(char.name, true);
                     const panel = document.querySelector(`.panel[data-id="${tabId}"]`);
+
+                    // Store character ID in panel for overwrite functionality
+                    panel.dataset.characterId = char.id;
+
                     setPanelData(panel, {
                         id: char.id,
                         name: char.name,
@@ -1223,8 +1186,6 @@
                         geschicklichkeit: char.geschicklichkeit,
                         wahrnehmung: char.wahrnehmung,
                         willenskraft: char.willenskraft,
-                        aktuelles_leben: char.aktuelles_leben,
-                        aktueller_stress: char.aktueller_stress,
                         zustaende: char.zustaende || [],
                         effekte: char.effekte || [],
                         imageData: char.image_base64
