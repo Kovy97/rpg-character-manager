@@ -293,9 +293,6 @@ def api_create_character():
         if 'zustaende' in data:
             character.set_zustaende(data['zustaende'])
 
-        if 'effekte' in data:
-            character.set_effekte(data['effekte'])
-
         db.session.add(character)
         db.session.flush()  # Get character ID
 
@@ -355,9 +352,6 @@ def api_update_character(character_id):
         # Handle states and effects
         if 'zustaende' in data:
             character.set_zustaende(data['zustaende'])
-
-        if 'effekte' in data:
-            character.set_effekte(data['effekte'])
 
         # Recalculate derived values
         character.calculate_derived_values()
@@ -845,8 +839,6 @@ def api_import_shared_character(shared_id):
             geschicklichkeit=character_data.get('geschicklichkeit', 1),
             wahrnehmung=character_data.get('wahrnehmung', 1),
             willenskraft=character_data.get('willenskraft', 1),
-            =character_data.get('', 10),
-            =character_data.get('', 0),
             zustaende=json.dumps(character_data.get('zustaende', [])),
                     )
 
@@ -905,16 +897,11 @@ def api_import_character():
             geschicklichkeit=character_data.get('geschicklichkeit', 1),
             wahrnehmung=character_data.get('wahrnehmung', 1),
             willenskraft=character_data.get('willenskraft', 1),
-            =character_data.get('', 20),
-            =character_data.get('', 0)
         )
 
         # Set states and effects if provided
         if 'zustaende' in character_data:
             character.set_zustaende(character_data['zustaende'])
-
-        if 'effekte' in character_data:
-            character.set_effekte(character_data['effekte'])
 
         # Calculate derived values
         character.calculate_derived_values()
@@ -1002,8 +989,6 @@ def api_save_character_new():
             geschicklichkeit=character_data.get('geschicklichkeit', 1),
             wahrnehmung=character_data.get('wahrnehmung', 1),
             willenskraft=character_data.get('willenskraft', 1),
-            =character_data.get('', 10),
-            =character_data.get('', 0),
             zustaende=json.dumps(character_data.get('zustaende', [])),
                     )
 
@@ -1068,10 +1053,7 @@ def api_save_character_overwrite(character_id):
         character.geschicklichkeit = character_data.get('geschicklichkeit', character.geschicklichkeit)
         character.wahrnehmung = character_data.get('wahrnehmung', character.wahrnehmung)
         character.willenskraft = character_data.get('willenskraft', character.willenskraft)
-        character. = character_data.get('', character.)
-        character. = character_data.get('', character.)
         character.zustaende = json.dumps(character_data.get('zustaende', []))
-        character.effekte = json.dumps(character_data.get('effekte', []))
 
         # Handle image if provided
         if character_data.get('image_base64'):
