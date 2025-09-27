@@ -234,44 +234,25 @@ def api_get_characters():
     try:
         result_characters = []
 
-        # Try new system first (UserCharacterAccess) - exclude deleted characters
+        # Method 1: Get characters from new access system
         access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
         for access in access_entries:
-            if access.character and access.access_level != 'deleted':
+            if access.character:
                 char_dict = access.character.to_dict()
                 char_dict['access_level'] = access.access_level
                 char_dict['access_id'] = access.id
                 result_characters.append(char_dict)
 
-        # Fallback to old system (direct ownership) ONLY for characters without any access entries
-        # This ensures deleted access entries don't show the character again
+        # Method 2: Get characters from old system (user_id link)
         existing_ids = {char['id'] for char in result_characters}
-
-        # Only add characters that have NO access entries at all (truly old system characters)
         old_characters = Character.query.filter_by(user_id=current_user.id).all()
+
         for char in old_characters:
             if char.id not in existing_ids:
-                # Check if this character has ANY access entries - if yes, skip fallback
-                has_access_entries = UserCharacterAccess.query.filter_by(character_id=char.id).first() is not None
-                if not has_access_entries:
-                    # This is a truly old character - create access entry and add to list
-                    access = UserCharacterAccess(
-                        user_id=current_user.id,
-                        character_id=char.id,
-                        access_level='owner',
-                        granted_by=current_user.id
-                    )
-                    db.session.add(access)
-                    db.session.flush()  # Get access ID
-
-                    char_dict = char.to_dict()
-                    char_dict['access_level'] = 'owner'
-                    char_dict['access_id'] = access.id
-                    result_characters.append(char_dict)
-
-        # Commit any new access entries created
-        if result_characters:
-            db.session.commit()
+                char_dict = char.to_dict()
+                char_dict['access_level'] = 'owner'
+                char_dict['access_id'] = None
+                result_characters.append(char_dict)
 
         return jsonify({'success': True, 'characters': result_characters})
     except Exception as e:
@@ -398,45 +379,42 @@ def api_update_character(character_id):
 @app.route('/api/characters/<int:character_id>', methods=['DELETE'])
 @login_required
 def api_remove_character_access(character_id):
-    """Remove user access to character (doesn't delete character permanently)"""
+    """Remove user access to character - simple deletion of the link"""
     try:
-        # Find user's access to this character (try new system first, fallback to old)
+        character_name = 'Charakter'
+        deleted = False
+
+        # Method 1: Remove from new access system
         access = UserCharacterAccess.query.filter_by(
             character_id=character_id,
             user_id=current_user.id
         ).first()
 
         if access:
-            # New system - remove access entry
-            character_name = access.character.name if access.character else 'Unbekannt'
+            character_name = access.character.name if access.character else 'Charakter'
             db.session.delete(access)
-            db.session.commit()
-        else:
-            # Fallback to old system - check if user owns character directly
-            character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
-            if not character:
-                return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
+            deleted = True
 
+        # Method 2: Remove from old system (set user_id to NULL)
+        character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
+        if character:
             character_name = character.name
-            # For old system characters: Create a "deleted" access entry to mark it as removed
-            # This prevents the character from being re-added by the fallback system
-            access = UserCharacterAccess(
-                user_id=current_user.id,
-                character_id=character.id,
-                access_level='deleted',  # Special marker for deleted characters
-                granted_by=current_user.id
-            )
-            db.session.add(access)
-            db.session.commit()
+            character.user_id = None  # Remove ownership link
+            deleted = True
+
+        if not deleted:
+            return jsonify({'success': False, 'message': 'Charakter nicht gefunden oder kein Zugriff'}), 404
+
+        db.session.commit()
 
         return jsonify({
             'success': True,
-            'message': f'Zugriff auf Charakter "{character_name}" entfernt (Charakter bleibt erhalten)'
+            'message': f'Charakter "{character_name}" aus deiner Liste entfernt'
         })
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': f'Fehler beim Entfernen des Zugriffs: {str(e)}'}), 500
+        return jsonify({'success': False, 'message': f'Fehler beim Entfernen: {str(e)}'}), 500
 
 @app.route('/api/user/info')
 @login_required
