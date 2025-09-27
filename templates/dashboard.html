@@ -937,6 +937,7 @@
         }));
 
         return {
+            id: panel.dataset.characterId || null,
             name: panel.querySelector('.name').value.trim(),
             staerke: parseInt(panel.querySelector('.staerke').value || '0', 10),
             geschicklichkeit: parseInt(panel.querySelector('.geschick').value || '0', 10),
@@ -1204,16 +1205,19 @@
     }
 
     window.deleteCharacter = async function(charId) {
-        if (!confirm('Charakter wirklich löschen?')) return;
+        if (!confirm('Charakter aus deiner Liste entfernen?\n\n(Charakter bleibt in der Datenbank erhalten)')) return;
         try {
             const response = await fetch(`/api/characters/${charId}`, { method: 'DELETE' });
             if (response.ok) {
+                const result = await response.json();
+                alert(`✅ ${result.message}`);
                 location.reload();
             } else {
-                alert('Fehler beim Löschen des Charakters.');
+                const error = await response.json();
+                alert(`❌ Fehler: ${error.message}`);
             }
         } catch (err) {
-            alert('Netzwerkfehler beim Löschen.');
+            alert('❌ Netzwerkfehler beim Entfernen des Charakters.');
         }
     };
 

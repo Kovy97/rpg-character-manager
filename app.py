@@ -230,17 +230,26 @@ def api_login():
 def api_get_characters():
     """Get all characters user has access to"""
     try:
-        # Get characters through UserCharacterAccess table
-        access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
-        characters = [access.character for access in access_entries if access.character]
-
-        # Add access level info to character data
         result_characters = []
+
+        # Try new system first (UserCharacterAccess)
+        access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
         for access in access_entries:
             if access.character:
                 char_dict = access.character.to_dict()
                 char_dict['access_level'] = access.access_level
                 char_dict['access_id'] = access.id
+                result_characters.append(char_dict)
+
+        # Fallback to old system (direct ownership) for existing characters
+        old_characters = Character.query.filter_by(user_id=current_user.id).all()
+        existing_ids = {char['id'] for char in result_characters}
+
+        for char in old_characters:
+            if char.id not in existing_ids:  # Don't duplicate characters
+                char_dict = char.to_dict()
+                char_dict['access_level'] = 'owner'
+                char_dict['access_id'] = None
                 result_characters.append(char_dict)
 
         return jsonify({'success': True, 'characters': result_characters})
@@ -1036,16 +1045,19 @@ def api_save_character_overwrite(character_id):
         if not character_data:
             return jsonify({'success': False, 'message': 'Charakterdaten erforderlich'}), 400
 
-        # Check if user has access to this character
+        # Check if user has access to this character (try new system first, fallback to old)
         access = UserCharacterAccess.query.filter_by(
             user_id=current_user.id,
             character_id=character_id
         ).first()
 
-        if not access or not access.character:
-            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
-
-        character = access.character
+        if access and access.character:
+            character = access.character
+        else:
+            # Fallback to old system (direct character ownership)
+            character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
+            if not character:
+                return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
 
         # Update character data
         character.name = character_data.get('name', character.name)
@@ -1064,8 +1076,13 @@ def api_save_character_overwrite(character_id):
         db.session.commit()
 
         char_dict = character.to_dict()
-        char_dict['access_level'] = access.access_level
-        char_dict['access_id'] = access.id
+        if access:
+            char_dict['access_level'] = access.access_level
+            char_dict['access_id'] = access.id
+        else:
+            # Fallback for old system
+            char_dict['access_level'] = 'owner'
+            char_dict['access_id'] = None
 
         return jsonify({
             'success': True,
