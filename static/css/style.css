@@ -1866,7 +1866,8 @@ select {
 }
 
 .dice-roll-content {
-    font-family: 'Courier New', monospace;
+    font-family: var(--chat-font-family, 'Courier New'), monospace;
+    font-size: var(--chat-font-size, 14px);
     font-weight: 600;
 }
 

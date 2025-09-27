@@ -1495,14 +1495,16 @@
                 </div>
             `;
         }
-
+        
         formatMessageText(text) {
-            // Einfache Quote-Formatierung nur für ASCII Anführungszeichen
+            // HTML escapen, falls dein Chat unsicheren Input hat
             let result = this.escapeHtml(text);
 
-            // Nur ASCII Anführungszeichen: "text"
-               result = result.replace(/"([^"]*)"/g,
-                '<span class="quote-text">$&</span>');
+            // ASCII Quotes: "text"
+            result = result.replace(/"([^"]+)"/g, '"<span class="quote-text">$1</span>"');
+
+            // Deutsche Quotes: „text“
+            result = result.replace(/„([\s\S]*?)“/gu, '„<span class="quote-text">$1</span>“');
 
             return result;
         }
@@ -1514,29 +1516,33 @@
         }
 
         formatDiceMessage(text) {
-            // Expected format: "Mortimer:\nWürfelt für "Mortimer Derrington" STR: W20=15+3=18 → Erfolg"
+            // Parse dice message format and remove result text like "→ Erfolg"
             const lines = text.split('\n');
             if (lines.length < 2) return this.escapeHtml(text);
 
             const username = this.escapeHtml(lines[0]);
-            const diceText = lines[1];
+            let diceText = lines[1];
 
-            // Parse dice roll: Würfelt für "Character" ATTR: W20=roll+mod=total → Result
-            const diceMatch = diceText.match(/Würfelt für "([^"]+)" (STR|GES|WAH|WIL): W20=(\d+)\+(\d+)=(\d+) → (.+)/);
+            // Remove "→ Erfolg", "→ Kritischer Erfolg!", "→ Misserfolg!" from the text
+            diceText = diceText.replace(/\s*→\s*(Kritischer\s+)?Erfolg!?/g, '');
+            diceText = diceText.replace(/\s*→\s*Misserfolg/g, '');
+
+            // Parse dice roll: Würfelt für "Character" ATTR: W20=roll+mod=total
+            const diceMatch = diceText.match(/Würfelt für "([^"]+)" (STR|GES|WAH|WIL): W20=(\d+)\+(\d+)=(\d+)/);
 
             if (!diceMatch) {
                 return `<div class="dice-roll-content">${this.escapeHtml(text)}</div>`;
             }
 
-            const [, characterName, attribute, rollValue, modifier, total, result] = diceMatch;
+            const [, characterName, attribute, rollValue, modifier, total] = diceMatch;
 
-            // Determine attribute class and result type
+            // Determine attribute class and result type based on roll value
             const attrClass = attribute.toLowerCase();
             let resultClass = 'normal ' + attrClass;
 
-            if (result.includes('Kritischer Erfolg')) {
+            if (parseInt(rollValue) === 20) {
                 resultClass = 'critical-success';
-            } else if (result.includes('Kritischer Fehler')) {
+            } else if (parseInt(rollValue) === 1) {
                 resultClass = 'critical-fail';
             }
 
@@ -1545,8 +1551,7 @@
                     <div class="dice-character-name">${this.escapeHtml(username)}</div>
                     <div>Würfelt für "<span class="dice-character-name">${this.escapeHtml(characterName)}</span>"
                     <span class="dice-attribute ${attrClass}">${attribute}</span>:
-                    W20=${rollValue}+${modifier}=<span class="dice-result ${resultClass}">${total}</span> →
-                    <span class="dice-result ${resultClass}">${this.escapeHtml(result)}</span></div>
+                    W20=${rollValue}+${modifier}=<span class="dice-result ${resultClass}">${total}</span></div>
                 </div>
             `;
         }
@@ -1560,16 +1565,9 @@
 
             return `
                 <div class="character-share-content">
-                    <div class="share-message">${this.escapeHtml(text)}</div>
                     <div class="character-preview">
                         <div class="character-info">
                             <strong>${this.escapeHtml(characterData.name)}</strong>
-                            <div class="attributes-preview">
-                                <span class="attr-preview str">STR: ${characterData.staerke}</span>
-                                <span class="attr-preview ges">GES: ${characterData.geschicklichkeit}</span>
-                                <span class="attr-preview wah">WAH: ${characterData.wahrnehmung}</span>
-                                <span class="attr-preview wil">WIL: ${characterData.willenskraft}</span>
-                            </div>
                         </div>
                         <button class="btn btn-import" onclick="chatManager.importCharacter('${characterDataStr}')">
                             📥 IMPORT

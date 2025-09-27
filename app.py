@@ -635,7 +635,7 @@ def api_send_dice_roll(room_id):
 
         # Create formatted dice message
         dice_message = f"""{current_user.username}:
-Würfelt für "{character_name}" {attribute}: W20={roll_value}+{modifier}={total} → {result_text}"""
+Würfelt für "{character_name}" {attribute}: W20={roll_value}+{modifier}={total}"""
 
         # Create message with special dice formatting
         message = ChatMessage(
@@ -706,7 +706,8 @@ def api_share_character(room_id):
             room_id=room_id,
             user_id=current_user.id,
             message=share_message,
-            message_type='character_share'  # Special type for character sharing
+            message_type='character_share',  # Special type for character sharing
+            message_data=json.dumps({'character_data': character_data})
         )
         db.session.add(message)
 
@@ -723,9 +724,8 @@ def api_share_character(room_id):
 
         # Return message with character data for frontend
         message_dict = message.to_dict()
-        message_dict.update({
-            'character_data': character_data
-        })
+        message_dict['character_data'] = character_data
+
 
         return jsonify({
             'success': True,

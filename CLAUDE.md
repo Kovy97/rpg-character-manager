@@ -19,14 +19,14 @@ gunicorn wsgi:app
 
 ### Database Management
 ```bash
-# Initialize database (automatic on first run)
-python -c "from app import create_app; app = create_app(); app.app_context().push(); from app import db; db.create_all()"
-
-# Alternative: Use the dedicated initialization script (recommended for deployment)
+# Initialize database (recommended for deployment)
 python init_db.py
 
+# Alternative: Direct initialization (automatic on first run)
+python -c "from app import create_app; app = create_app(); app.app_context().push(); from models import db; db.create_all()"
+
 # Access database shell
-python -c "from app import create_app; app = create_app(); app.app_context().push(); from app import db; from models import User, Character"
+python -c "from app import create_app; app = create_app(); app.app_context().push(); from models import db, User, Character"
 ```
 
 **⚠️ CRITICAL: NO DATABASE FLUSHES ALLOWED**
@@ -213,6 +213,7 @@ When working with this codebase:
 ├── models.py           # Database models (172 lines: User, Character)
 ├── config.py           # Environment configuration classes
 ├── wsgi.py             # Production WSGI entry point
+├── init_db.py          # Database initialization script for deployment
 ├── Procfile            # DigitalOcean deployment config
 ├── Dockerfile          # Multi-stage container build
 ├── requirements.txt    # Python 3.11 compatible dependencies

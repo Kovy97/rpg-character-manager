@@ -286,9 +286,10 @@ class ChatMessage(db.Model):
     message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     message_type = db.Column(db.String(20), default='text')  # text, system, character_share
+    message_data = db.Column(db.Text, nullable=True)  # JSON data for special message types
 
     def to_dict(self):
-        return {
+        result = {
             'id': self.id,
             'room_id': self.room_id,
             'user_id': self.user_id,
@@ -297,6 +298,17 @@ class ChatMessage(db.Model):
             'message_type': self.message_type,
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
+
+        # Parse message_data if available
+        if self.message_data:
+            try:
+                import json
+                parsed_data = json.loads(self.message_data)
+                result.update(parsed_data)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        return result
 
     def __repr__(self):
         return f'<ChatMessage {self.id} in Room {self.room_id}>'
