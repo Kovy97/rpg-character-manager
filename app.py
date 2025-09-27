@@ -53,7 +53,7 @@ def create_app(config_name=None):
 
     return app
 
-# Create the app
+# Create the app instance
 app = create_app()
 
 # Routes
