@@ -234,28 +234,21 @@ def api_get_characters():
     try:
         result_characters = []
 
-        # Method 1: Get characters from new access system (exclude deleted)
+        # Method 1: Get characters from new access system
         access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
-        deleted_character_ids = set()
-
         for access in access_entries:
             if access.character:
-                if access.access_level == 'deleted':
-                    # Track deleted characters to exclude from old system
-                    deleted_character_ids.add(access.character_id)
-                else:
-                    # Add non-deleted characters
-                    char_dict = access.character.to_dict()
-                    char_dict['access_level'] = access.access_level
-                    char_dict['access_id'] = access.id
-                    result_characters.append(char_dict)
+                char_dict = access.character.to_dict()
+                char_dict['access_level'] = access.access_level
+                char_dict['access_id'] = access.id
+                result_characters.append(char_dict)
 
-        # Method 2: Get characters from old system (user_id link) - exclude deleted
+        # Method 2: Get characters from old system (user_id link)
         existing_ids = {char['id'] for char in result_characters}
         old_characters = Character.query.filter_by(user_id=current_user.id).all()
 
         for char in old_characters:
-            if char.id not in existing_ids and char.id not in deleted_character_ids:
+            if char.id not in existing_ids:
                 char_dict = char.to_dict()
                 char_dict['access_level'] = 'owner'
                 char_dict['access_id'] = None
@@ -386,49 +379,50 @@ def api_update_character(character_id):
 @app.route('/api/characters/<int:character_id>', methods=['DELETE'])
 @login_required
 def api_remove_character_access(character_id):
-    """Remove user access to character - simple deletion of the link"""
+    """REAL character deletion from database"""
     try:
         character_name = 'Charakter'
         deleted = False
 
-        # Method 1: Remove from new access system
+        # Find the character - either through new or old system
+        character = None
         access = UserCharacterAccess.query.filter_by(
             character_id=character_id,
             user_id=current_user.id
         ).first()
 
-        if access:
-            character_name = access.character.name if access.character else 'Charakter'
-            db.session.delete(access)
-            deleted = True
-
-        # Method 2: Check old system and mark as deleted
-        character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
-        if character and not access:  # Only if not already found in new system
+        if access and access.character:
+            character = access.character
             character_name = character.name
-            # Create permanent 'deleted' marker to prevent re-appearance
-            access = UserCharacterAccess(
-                user_id=current_user.id,
-                character_id=character.id,
-                access_level='deleted',  # Permanent deletion marker
-                granted_by=current_user.id
-            )
-            db.session.add(access)
-            deleted = True
+        else:
+            # Try old system
+            character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
+            if character:
+                character_name = character.name
 
-        if not deleted:
+        if not character:
             return jsonify({'success': False, 'message': 'Charakter nicht gefunden oder kein Zugriff'}), 404
+
+        # REAL DATABASE DELETION
+        # 1. Delete all access entries for this character
+        UserCharacterAccess.query.filter_by(character_id=character.id).delete()
+
+        # 2. Delete all shared character entries
+        SharedCharacter.query.filter_by(original_character_id=character.id).delete()
+
+        # 3. Delete the character itself
+        db.session.delete(character)
 
         db.session.commit()
 
         return jsonify({
             'success': True,
-            'message': f'Charakter "{character_name}" aus deiner Liste entfernt'
+            'message': f'Charakter "{character_name}" komplett gelöscht'
         })
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'success': False, 'message': f'Fehler beim Entfernen: {str(e)}'}), 500
+        return jsonify({'success': False, 'message': f'Fehler beim Löschen: {str(e)}'}), 500
 
 @app.route('/api/user/info')
 @login_required
