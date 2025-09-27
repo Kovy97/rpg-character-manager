@@ -234,10 +234,10 @@ def api_get_characters():
     try:
         result_characters = []
 
-        # Try new system first (UserCharacterAccess)
+        # Try new system first (UserCharacterAccess) - exclude deleted characters
         access_entries = UserCharacterAccess.query.filter_by(user_id=current_user.id).all()
         for access in access_entries:
-            if access.character:
+            if access.character and access.access_level != 'deleted':
                 char_dict = access.character.to_dict()
                 char_dict['access_level'] = access.access_level
                 char_dict['access_id'] = access.id
@@ -418,17 +418,15 @@ def api_remove_character_access(character_id):
                 return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
 
             character_name = character.name
-            # For old system, we actually delete the character (legacy behavior)
-            # Or we could create an access entry and then delete it - let's do that for consistency
+            # For old system characters: Create a "deleted" access entry to mark it as removed
+            # This prevents the character from being re-added by the fallback system
             access = UserCharacterAccess(
                 user_id=current_user.id,
                 character_id=character.id,
-                access_level='owner',
+                access_level='deleted',  # Special marker for deleted characters
                 granted_by=current_user.id
             )
             db.session.add(access)
-            db.session.flush()
-            db.session.delete(access)
             db.session.commit()
 
         return jsonify({
