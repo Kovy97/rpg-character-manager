@@ -40,16 +40,13 @@ def create_app(config_name=None):
     upload_folder = app.config.get('UPLOAD_FOLDER', 'static/images')
     os.makedirs(upload_folder, exist_ok=True)
 
-    # Initialize database (only in development or when explicitly requested)
-    if os.environ.get('FLASK_ENV') == 'development' or os.environ.get('INIT_DB') == 'true':
-        with app.app_context():
-            try:
-                db.create_all()
-                print("Database initialized successfully!")
-            except Exception as e:
-                print(f"Database initialization warning: {e}")
-    else:
-        print("Skipping database initialization in production")
+    # Initialize database tables
+    with app.app_context():
+        try:
+            db.create_all()
+            print("✅ Database tables created successfully!")
+        except Exception as e:
+            print(f"⚠️ Database initialization warning: {e}")
 
     return app
 
