@@ -299,8 +299,8 @@ class ChatMessage(db.Model):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
 
-        # Parse message_data if available
-        if self.message_data:
+        # Parse message_data if available (safe check for column existence)
+        if hasattr(self, 'message_data') and self.message_data:
             try:
                 import json
                 parsed_data = json.loads(self.message_data)
