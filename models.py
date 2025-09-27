@@ -286,7 +286,7 @@ class ChatMessage(db.Model):
     message = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow)
     message_type = db.Column(db.String(20), default='text')  # text, system, character_share
-    message_data = db.Column(db.Text, nullable=True)  # JSON data for special message types
+    # message_data = db.Column(db.Text, nullable=True)  # TODO: Re-enable after migration
 
     def to_dict(self):
         result = {
@@ -299,14 +299,15 @@ class ChatMessage(db.Model):
             'timestamp': self.timestamp.isoformat() if self.timestamp else None
         }
 
+        # TODO: Re-enable message_data parsing after migration
         # Parse message_data if available (safe check for column existence)
-        if hasattr(self, 'message_data') and self.message_data:
-            try:
-                import json
-                parsed_data = json.loads(self.message_data)
-                result.update(parsed_data)
-            except (json.JSONDecodeError, TypeError):
-                pass
+        # if hasattr(self, 'message_data') and self.message_data:
+        #     try:
+        #         import json
+        #         parsed_data = json.loads(self.message_data)
+        #         result.update(parsed_data)
+        #     except (json.JSONDecodeError, TypeError):
+        #         pass
 
         return result
 
