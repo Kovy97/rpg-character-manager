@@ -734,8 +734,9 @@ def api_share_character(room_id):
             room_id=room_id,
             user_id=current_user.id,
             message=share_message,
-            message_type='character_share',  # Special type for character sharing
-            message_data=json.dumps({'character_data': character_data})
+            message_type='character_share'  # Special type for character sharing
+            # TODO: Re-enable message_data after migration
+            # message_data=json.dumps({'character_data': character_data})
         )
         db.session.add(message)
 

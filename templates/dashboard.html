@@ -1467,7 +1467,8 @@
                     messageText = this.formatDiceMessage(msg.message);
                 } else if (msg.message_type === 'character_share') {
                     messageClasses += ' character-share';
-                    messageText = this.formatCharacterShareMessage(msg.message, msg.character_data);
+                    // TODO: Re-enable after message_data migration
+                    messageText = this.formatCharacterShareMessage(msg.message, null); // msg.character_data);
                 } else {
                     // Use the unified formatMessageText function for regular messages
                     messageText = this.formatMessageText(msg.message);
