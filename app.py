@@ -378,21 +378,36 @@ def api_update_character(character_id):
 def api_remove_character_access(character_id):
     """Remove user access to character (doesn't delete character permanently)"""
     try:
-        # Find user's access to this character
+        # Find user's access to this character (try new system first, fallback to old)
         access = UserCharacterAccess.query.filter_by(
             character_id=character_id,
             user_id=current_user.id
         ).first()
 
-        if not access:
-            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
+        if access:
+            # New system - remove access entry
+            character_name = access.character.name if access.character else 'Unbekannt'
+            db.session.delete(access)
+            db.session.commit()
+        else:
+            # Fallback to old system - check if user owns character directly
+            character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
+            if not character:
+                return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Charakter'}), 404
 
-        # Get character name for message
-        character_name = access.character.name if access.character else 'Unbekannt'
-
-        # Remove access (character stays in database)
-        db.session.delete(access)
-        db.session.commit()
+            character_name = character.name
+            # For old system, we actually delete the character (legacy behavior)
+            # Or we could create an access entry and then delete it - let's do that for consistency
+            access = UserCharacterAccess(
+                user_id=current_user.id,
+                character_id=character.id,
+                access_level='owner',
+                granted_by=current_user.id
+            )
+            db.session.add(access)
+            db.session.flush()
+            db.session.delete(access)
+            db.session.commit()
 
         return jsonify({
             'success': True,
@@ -852,12 +867,8 @@ def api_import_shared_character(shared_id):
                     )
 
         # Handle image data if present
-        if character_data.get('image_data'):
-            import base64
-            try:
-                new_character.image_data = base64.b64decode(character_data['image_data'])
-            except Exception:
-                pass  # Skip image if decoding fails
+        if character_data.get('image_base64'):
+            new_character.set_image_from_base64(character_data['image_base64'])
 
         db.session.add(new_character)
         db.session.flush()  # Get character ID
