@@ -599,6 +599,86 @@ def api_send_message(room_id):
         db.session.rollback()
         return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
 
+@app.route('/api/chat/rooms/<int:room_id>/dice', methods=['POST'])
+@login_required
+def api_send_dice_roll(room_id):
+    """Send dice roll announcement to chat room"""
+    try:
+        room = ChatRoom.query.get(room_id)
+        if not room:
+            return jsonify({'success': False, 'message': 'Raum nicht gefunden'}), 404
+
+        # Check if user is member (for private rooms) or if room is public
+        if not room.is_public and not room.is_member(current_user.id):
+            return jsonify({'success': False, 'message': 'Kein Zugriff auf diesen Raum'}), 403
+
+        data = request.get_json()
+        character_name = data.get('character_name', '').strip()
+        attribute = data.get('attribute', '').strip()
+        roll_value = int(data.get('roll_value', 0))
+        modifier = int(data.get('modifier', 0))
+        total = int(data.get('total', 0))
+
+        if not character_name or not attribute:
+            return jsonify({'success': False, 'message': 'Charaktername und Attribut erforderlich'}), 400
+
+        # Determine roll result type
+        if roll_value == 20:
+            result_type = 'critical-success'
+            result_text = 'Kritischer Erfolg!'
+        elif roll_value == 1:
+            result_type = 'critical-fail'
+            result_text = 'Kritischer Fehler!'
+        else:
+            result_type = 'normal'
+            result_text = 'Erfolg'
+
+        # Create formatted dice message
+        dice_message = f"""{current_user.username}:
+Würfelt für "{character_name}" {attribute}: W20={roll_value}+{modifier}={total} → {result_text}"""
+
+        # Create message with special dice formatting
+        message = ChatMessage(
+            room_id=room_id,
+            user_id=current_user.id,
+            message=dice_message,
+            message_type='dice'  # Special type for dice rolls
+        )
+        db.session.add(message)
+
+        # Clean up old messages if more than 200
+        message_count = ChatMessage.query.filter_by(room_id=room_id).count()
+        if message_count > 200:
+            old_messages = ChatMessage.query.filter_by(room_id=room_id)\
+                                         .order_by(ChatMessage.timestamp.asc())\
+                                         .limit(message_count - 200).all()
+            for old_msg in old_messages:
+                db.session.delete(old_msg)
+
+        db.session.commit()
+
+        # Return message with dice metadata for frontend formatting
+        message_dict = message.to_dict()
+        message_dict.update({
+            'dice_data': {
+                'character_name': character_name,
+                'attribute': attribute,
+                'roll_value': roll_value,
+                'modifier': modifier,
+                'total': total,
+                'result_type': result_type
+            }
+        })
+
+        return jsonify({
+            'success': True,
+            'message': message_dict
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'message': f'Fehler: {str(e)}'}), 500
+
 @app.route('/api/chat/rooms/<int:room_id>/members', methods=['GET'])
 @login_required
 def api_get_members(room_id):

@@ -1858,6 +1858,83 @@ select {
     font-weight: 500;
 }
 
+/* Dice Roll Messages */
+.message.dice {
+    background: linear-gradient(135deg, rgba(78, 201, 176, 0.1) 0%, rgba(86, 156, 214, 0.1) 100%);
+    border-color: var(--accent);
+    border-width: 2px;
+}
+
+.dice-roll-content {
+    font-family: 'Courier New', monospace;
+    font-weight: 600;
+}
+
+.dice-character-name {
+    color: var(--accent);
+    font-weight: bold;
+}
+
+.dice-attribute {
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin: 0 2px;
+}
+
+.dice-attribute.str {
+    color: #e57373;
+    background: rgba(229, 115, 115, 0.2);
+}
+
+.dice-attribute.ges {
+    color: #5bb98c;
+    background: rgba(91, 185, 140, 0.2);
+}
+
+.dice-attribute.wah {
+    color: #569cd6;
+    background: rgba(86, 156, 214, 0.2);
+}
+
+.dice-attribute.wil {
+    color: #d7ba7d;
+    background: rgba(215, 186, 125, 0.2);
+}
+
+.dice-result {
+    font-weight: bold;
+    padding: 2px 4px;
+    border-radius: 3px;
+    margin-left: 4px;
+}
+
+.dice-result.critical-success {
+    color: #ffd166;
+    background: rgba(255, 209, 102, 0.2);
+}
+
+.dice-result.critical-fail {
+    color: #e57373;
+    background: rgba(229, 115, 115, 0.2);
+}
+
+.dice-result.normal.str {
+    color: #e57373;
+}
+
+.dice-result.normal.ges {
+    color: #5bb98c;
+}
+
+.dice-result.normal.wah {
+    color: #569cd6;
+}
+
+.dice-result.normal.wil {
+    color: #d7ba7d;
+}
+
 @media (max-width: 800px) {
     .grid,
     .compact-row {

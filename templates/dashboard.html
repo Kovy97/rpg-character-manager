@@ -859,6 +859,55 @@
         while (historyList.children.length > 10) {
             historyList.removeChild(historyList.lastChild);
         }
+
+        // Send dice roll to chat if chat is open
+        sendDiceRollToChat(panel, attr, roll, effValue, totalValue);
+    }
+
+    function sendDiceRollToChat(panel, attribute, rollValue, modifier, total) {
+        // Check if user is in a chat room
+        const activeRoom = localStorage.getItem('activeRoom');
+        if (!activeRoom) return;
+
+        // Get character name from panel
+        const characterName = panel.querySelector('.name').value.trim();
+        if (!characterName) return;
+
+        // Map German attribute names to short codes for display
+        const attrDisplayMapping = {
+            'Stärke': 'STR',
+            'Geschicklichkeit': 'GES',
+            'Wahrnehmung': 'WAH',
+            'Willenskraft': 'WIL'
+        };
+
+        // Send dice roll to chat
+        fetch(`/api/chat/rooms/${activeRoom}/dice`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                character_name: characterName,
+                attribute: attrDisplayMapping[attribute] || attribute,
+                roll_value: rollValue,
+                modifier: modifier,
+                total: total
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log('Dice roll sent to chat');
+                // Refresh chat messages if chat panel is visible
+                if (typeof refreshChatMessages === 'function') {
+                    refreshChatMessages();
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error sending dice roll to chat:', error);
+        });
     }
 
     function getPanelData(panel) {
