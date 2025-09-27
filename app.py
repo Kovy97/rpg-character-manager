@@ -45,7 +45,7 @@ def create_app(config_name=None):
         try:
             db.create_all()
 
-            # Migration: Add missing columns to existing tables
+            # Migration: Add missing columns and tables
             from sqlalchemy import text
             try:
                 # Check if message_data column exists, if not add it
@@ -58,6 +58,17 @@ def create_app(config_name=None):
                         "ALTER TABLE chat_messages ADD COLUMN message_data TEXT"
                     ))
                     print("✅ Added missing message_data column to chat_messages")
+
+                # Check if room_members table exists
+                result = db.engine.execute(text(
+                    "SELECT table_name FROM information_schema.tables "
+                    "WHERE table_name='room_members'"
+                ))
+                if not result.fetchone():
+                    print("⚠️ room_members table missing - recreating all tables")
+                    # Force recreation of all tables if room_members is missing
+                    db.create_all()
+
             except Exception as migration_error:
                 print(f"⚠️ Migration warning: {migration_error}")
 
