@@ -49,25 +49,27 @@ def create_app(config_name=None):
             from sqlalchemy import text
             try:
                 # Check if message_data column exists, if not add it
-                result = db.engine.execute(text(
-                    "SELECT column_name FROM information_schema.columns "
-                    "WHERE table_name='chat_messages' AND column_name='message_data'"
-                ))
-                if not result.fetchone():
-                    db.engine.execute(text(
-                        "ALTER TABLE chat_messages ADD COLUMN message_data TEXT"
+                with db.engine.connect() as conn:
+                    result = conn.execute(text(
+                        "SELECT column_name FROM information_schema.columns "
+                        "WHERE table_name='chat_messages' AND column_name='message_data'"
                     ))
-                    print("✅ Added missing message_data column to chat_messages")
+                    if not result.fetchone():
+                        conn.execute(text(
+                            "ALTER TABLE chat_messages ADD COLUMN message_data TEXT"
+                        ))
+                        conn.commit()
+                        print("✅ Added missing message_data column to chat_messages")
 
-                # Check if room_members table exists
-                result = db.engine.execute(text(
-                    "SELECT table_name FROM information_schema.tables "
-                    "WHERE table_name='room_members'"
-                ))
-                if not result.fetchone():
-                    print("⚠️ room_members table missing - recreating all tables")
-                    # Force recreation of all tables if room_members is missing
-                    db.create_all()
+                    # Check if room_members table exists
+                    result = conn.execute(text(
+                        "SELECT table_name FROM information_schema.tables "
+                        "WHERE table_name='room_members'"
+                    ))
+                    if not result.fetchone():
+                        print("⚠️ room_members table missing - recreating all tables")
+                        # Force recreation of all tables if room_members is missing
+                        db.create_all()
 
             except Exception as migration_error:
                 print(f"⚠️ Migration warning: {migration_error}")
@@ -346,7 +348,8 @@ def api_update_character(character_id):
             if attr in data:
                 setattr(character, attr, max(1, int(data[attr])))
 
-        for attr in ['', '']:
+        # Update current health and stress if provided
+        for attr in ['aktuelles_leben', 'aktueller_stress']:
             if attr in data:
                 setattr(character, attr, max(0, int(data[attr])))
 

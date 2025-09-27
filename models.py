@@ -190,15 +190,18 @@ def init_db(app):
         # Create indexes for better performance
         try:
             # These might already exist, so we wrap in try/except
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)')
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id)')
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_characters_name ON characters(name)')
-            # Chat indexes
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_chat_rooms_created_by ON chat_rooms(created_by)')
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_room_id ON chat_messages(room_id)')
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp)')
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id)')
-            db.engine.execute('CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id)')
+            from sqlalchemy import text
+            with db.engine.connect() as conn:
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)'))
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_characters_user_id ON characters(user_id)'))
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_characters_name ON characters(name)'))
+                # Chat indexes
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_chat_rooms_created_by ON chat_rooms(created_by)'))
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_chat_messages_room_id ON chat_messages(room_id)'))
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_chat_messages_timestamp ON chat_messages(timestamp)'))
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_room_members_room_id ON room_members(room_id)'))
+                conn.execute(text('CREATE INDEX IF NOT EXISTS idx_room_members_user_id ON room_members(user_id)'))
+                conn.commit()
         except Exception as e:
             print(f"Index creation note: {e}")
 
