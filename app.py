@@ -395,11 +395,20 @@ def api_remove_character_access(character_id):
             db.session.delete(access)
             deleted = True
 
-        # Method 2: Remove from old system (set user_id to NULL)
+        # Method 2: Check old system and create access entry to be deleted
         character = Character.query.filter_by(id=character_id, user_id=current_user.id).first()
-        if character:
+        if character and not access:  # Only if not already found in new system
             character_name = character.name
-            character.user_id = None  # Remove ownership link
+            # Create access entry and then delete it (migrates to new system)
+            access = UserCharacterAccess(
+                user_id=current_user.id,
+                character_id=character.id,
+                access_level='owner',
+                granted_by=current_user.id
+            )
+            db.session.add(access)
+            db.session.flush()
+            db.session.delete(access)
             deleted = True
 
         if not deleted:
