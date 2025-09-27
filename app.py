@@ -44,6 +44,23 @@ def create_app(config_name=None):
     with app.app_context():
         try:
             db.create_all()
+
+            # Migration: Add missing columns to existing tables
+            from sqlalchemy import text
+            try:
+                # Check if message_data column exists, if not add it
+                result = db.engine.execute(text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name='chat_messages' AND column_name='message_data'"
+                ))
+                if not result.fetchone():
+                    db.engine.execute(text(
+                        "ALTER TABLE chat_messages ADD COLUMN message_data TEXT"
+                    ))
+                    print("✅ Added missing message_data column to chat_messages")
+            except Exception as migration_error:
+                print(f"⚠️ Migration warning: {migration_error}")
+
             print("✅ Database tables created successfully!")
         except Exception as e:
             print(f"⚠️ Database initialization warning: {e}")
