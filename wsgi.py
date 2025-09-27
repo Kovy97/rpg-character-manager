@@ -1,8 +1,4 @@
-from app import create_app
-import os
-
-# Create app instance
-app = create_app()
+from app import app
 
 if __name__ == "__main__":
     app.run()
