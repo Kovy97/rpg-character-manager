@@ -243,16 +243,35 @@ def api_get_characters():
                 char_dict['access_id'] = access.id
                 result_characters.append(char_dict)
 
-        # Fallback to old system (direct ownership) for existing characters
-        old_characters = Character.query.filter_by(user_id=current_user.id).all()
+        # Fallback to old system (direct ownership) ONLY for characters without any access entries
+        # This ensures deleted access entries don't show the character again
         existing_ids = {char['id'] for char in result_characters}
 
+        # Only add characters that have NO access entries at all (truly old system characters)
+        old_characters = Character.query.filter_by(user_id=current_user.id).all()
         for char in old_characters:
-            if char.id not in existing_ids:  # Don't duplicate characters
-                char_dict = char.to_dict()
-                char_dict['access_level'] = 'owner'
-                char_dict['access_id'] = None
-                result_characters.append(char_dict)
+            if char.id not in existing_ids:
+                # Check if this character has ANY access entries - if yes, skip fallback
+                has_access_entries = UserCharacterAccess.query.filter_by(character_id=char.id).first() is not None
+                if not has_access_entries:
+                    # This is a truly old character - create access entry and add to list
+                    access = UserCharacterAccess(
+                        user_id=current_user.id,
+                        character_id=char.id,
+                        access_level='owner',
+                        granted_by=current_user.id
+                    )
+                    db.session.add(access)
+                    db.session.flush()  # Get access ID
+
+                    char_dict = char.to_dict()
+                    char_dict['access_level'] = 'owner'
+                    char_dict['access_id'] = access.id
+                    result_characters.append(char_dict)
+
+        # Commit any new access entries created
+        if result_characters:
+            db.session.commit()
 
         return jsonify({'success': True, 'characters': result_characters})
     except Exception as e:
